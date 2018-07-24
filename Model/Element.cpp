@@ -37,7 +37,7 @@ QMap<QString, Property *> *Element::initPropertyMap()
 {
     QMap<QString, Property*>* propertyMap = new QMap<QString, Property*>();
     addPropertyToMap(propertyMap, Element::PROPERTY_NAME);
-//    addPropertyToMap(propertyMap, Element::PROPERTY_DESCRIPTION);
+    addPropertyToMap(propertyMap, Element::PROPERTY_DESCRIPTION);
     return propertyMap;
 }
 
