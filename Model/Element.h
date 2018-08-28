@@ -54,17 +54,20 @@ class uDoubleProperty;
 
 class LinkToOneProperty;
 using Link01Property = LinkToOneProperty;
-class Link11Property;
+using Link11Property = LinkToOneProperty;
 
 class LinkProperty;
 template <template <typename...> class Container, typename... Args> class GenericLinkToManyProperty;
 using LinkToManyProperty        = GenericLinkToManyProperty<QSet>;
 using Link0NProperty            = LinkToManyProperty;
+using Link1NProperty            = LinkToManyProperty;
 using OrderedLinkToManyProperty = GenericLinkToManyProperty<QList>;
 using OrderedLink0NProperty     = GenericLinkToManyProperty<QList>;
 using OrderedLink1NProperty     = GenericLinkToManyProperty<QList>;
 using MapLinkProperty           = GenericLinkToManyProperty<QMap, QVariant>;
+using Map1NLinkProperty           = GenericLinkToManyProperty<QMap, QVariant>;
 using MultiMapLinkProperty      = GenericLinkToManyProperty<QMultiMap, QVariant>;
+using MultiMap1NLinkProperty      = GenericLinkToManyProperty<QMultiMap, QVariant>;
 
 using ElemId       = QString;
 using ElemSet      = QSet<Element*>;
@@ -86,7 +89,6 @@ class Element
     template<typename TypeAttribute> friend class AttributeProperty;
     friend class EnumProperty;
     friend class LinkToOneProperty;
-    friend class Link11Property;
     template <template <typename...> class Container, typename... Args> friend class GenericLinkToManyProperty;
 
     friend class Model; // to be able to change the state of the Element
@@ -161,6 +163,7 @@ public:
 
     virtual QString getDefaultName();
 
+    void validateLinkProperties(QStringList &ecoreErrors);
 
 
     inline QList<Property*> getPropertyList() const ;

@@ -16,14 +16,14 @@ void PropertyFactoryMiniEMF::initStatics(){
     Person::sClassPropertyMap = Element::initPropertyMap();
     Person::PROPERTY_sex      = _create<EnumProperty>(Person::sClassPropertyMap, "sex", QT_TRANSLATE_NOOP("Property", "Sex"));
     Person::PROPERTY_age      = _create<int, AttributeProperty>(Person::sClassPropertyMap, "age", QT_TRANSLATE_NOOP("Property", "Age"), 0);
-    Person::PROPERTY_partner  = _create<Link01Property>(Person::sClassPropertyMap, Person::TYPE, Person::TYPE, "partner", QT_TRANSLATE_NOOP("Property", "Partner"));
-    Person::PROPERTY_parents  = _create<Link0NProperty>(Person::sClassPropertyMap, Person::TYPE, Person::TYPE, "parents", QT_TRANSLATE_NOOP("Property", "Parents"));
-    Person::PROPERTY_childs   = _create<MapLinkProperty>(Person::sClassPropertyMap, Person::TYPE, Person::TYPE, "childs", QT_TRANSLATE_NOOP("Property", "Children"));
-    Person::PROPERTY_meetings = _create<MultiMapLinkProperty>(Person::sClassPropertyMap, Person::TYPE, Meeting::TYPE, "meetings", QT_TRANSLATE_NOOP("Property", "Meetings"));
+    Person::PROPERTY_partner  = _create<Link01Property>(Person::sClassPropertyMap, Person::TYPE, Person::TYPE, "partner", QT_TRANSLATE_NOOP("Property", "Partner"), false);
+    Person::PROPERTY_parents  = _create<Link0NProperty>(Person::sClassPropertyMap, Person::TYPE, Person::TYPE, "parents", QT_TRANSLATE_NOOP("Property", "Parents"), false);
+    Person::PROPERTY_childs   = _create<MapLinkProperty>(Person::sClassPropertyMap, Person::TYPE, Person::TYPE, "childs", QT_TRANSLATE_NOOP("Property", "Children"), false);
+    Person::PROPERTY_meetings = _create<MultiMapLinkProperty>(Person::sClassPropertyMap, Person::TYPE, Meeting::TYPE, "meetings", QT_TRANSLATE_NOOP("Property", "Meetings"), false);
 
     Meeting::sClassPropertyMap = Element::initPropertyMap();
     Meeting::PROPERTY_date         = _create<QDateTime, AttributeProperty>(Meeting::sClassPropertyMap, "date", QT_TRANSLATE_NOOP("Property", "Date and Time"), QDateTime::currentDateTime());
-    Meeting::PROPERTY_participants = _create<MapLinkProperty>(Meeting::sClassPropertyMap, Meeting::TYPE, Person::TYPE, "participants", QT_TRANSLATE_NOOP("Property", "Participants"));
+    Meeting::PROPERTY_participants = _create<MapLinkProperty>(Meeting::sClassPropertyMap, Meeting::TYPE, Person::TYPE, "participants", QT_TRANSLATE_NOOP("Property", "Participants"), false);
 }
 
 

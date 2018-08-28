@@ -165,9 +165,9 @@ class LinkProperty : public Property
 {
 public:
     bool isALinkProperty()              const override { return true; }
+    bool isMandatory()                  const          { return _isMandatory; }
     virtual bool isOrdered()            const = 0;
     virtual bool isMapProperty()        const = 0;
-    virtual bool isMandatory()          const = 0;
     virtual bool isALinkToOneProperty() const = 0;
     bool isALinkToManyProperty() const ;
 
@@ -203,19 +203,22 @@ public:
 
     virtual void setValueFromXMIStringIdList(Element *element, const QString &ids, Model *model) = 0;
 
+    void validateElement(Element *element, QStringList &ecoreErrors);
+
 #ifdef __USE_HMI__
     virtual QWidget *getEditor(Element *const elem, QWidget *parent = nullptr) override {Q_UNUSED(elem);return new QWidget(parent);}
     virtual QVariant getEditorUpdatedVariant(Element *const elem, QWidget *editor) override {Q_UNUSED(elem);Q_UNUSED(editor); return QVariant();}
 #endif
 
 protected:
-    LinkProperty(ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isSerializable = true);
+    LinkProperty(ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable = true);
 
 protected:
     ElementType  *_elementType;       // ElementType to which this LinkProperty belongs
     ElementType  *_linkedElementType; // ElementType linked through this LinkProperty
     bool         _isEcoreContainment;
     LinkProperty *_reverseLinkProperty;
+    const bool    _isMandatory;
 };
 
 
@@ -224,11 +227,10 @@ class LinkToOneProperty : public LinkProperty
 public:
     virtual bool isOrdered()            const override { return false; }
     virtual bool isMapProperty()        const override { return false; }
-    virtual bool isMandatory()          const override { return false; }
     virtual bool isALinkToOneProperty() const override { return true; }
 
-    LinkToOneProperty(ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isSerializable = true):
-        LinkProperty(eltType, linkedEltType, name, label, isSerializable){}
+    LinkToOneProperty(ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable = true):
+        LinkProperty(eltType, linkedEltType, name, label, isMandatory, isSerializable){}
     virtual ~LinkToOneProperty() = default;
 
     QVariant createNewInitValue() override;
@@ -252,28 +254,15 @@ public:
 #endif
 };
 
-class Link11Property : public LinkToOneProperty
-{
-public:
-    bool isMandatory() const override { return true; }
-
-    Link11Property(ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isSerializable = true):
-        LinkToOneProperty(eltType, linkedEltType, name, label, isSerializable) {}
-
-    ~Link11Property() = default;
-};
-
-
 
 template <template <typename...> class Container, typename... Args> class GenericLinkToManyProperty : public LinkProperty {
 public:
     virtual bool isOrdered()            const override { return true; }
     virtual bool isMapProperty()        const override { return false; }
-    virtual bool isMandatory()          const override { return false; }
     virtual bool isALinkToOneProperty() const override { return false; }
 
-    GenericLinkToManyProperty(ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isSerializable = true):
-        LinkProperty(eltType, linkedEltType, name, label, isSerializable) {}
+    GenericLinkToManyProperty(ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable = true):
+        LinkProperty(eltType, linkedEltType, name, label, isMandatory, isSerializable) {}
     virtual ~GenericLinkToManyProperty() = default;
 
     QVariant createNewInitValue() override;
@@ -295,6 +284,7 @@ public:
 
     virtual void serializeAsXmiAttribute(XmiWriter *xmiWriter, Element *element) override;
     virtual void setValueFromXMIStringIdList(Element *element, const QString &ids, Model *model) override;
+
 };
 
 template <> inline bool MapLinkProperty::isMapProperty()      const {return true;}
@@ -372,6 +362,7 @@ template <template <typename...> class Container, typename... Args>
 {
     xmiWriter->addAttribute(_name, getLinkedElements(element, true));
 }
+
 
 //////////////////////////////////////////////////////////
 // Template specializations for GenericLinkToManyProperty

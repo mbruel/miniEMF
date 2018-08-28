@@ -143,12 +143,14 @@ LinkProperty::LinkProperty(ElementType *const eltType,
                            ElementType *const linkedEltType,
                            const QString &name,
                            const char *label,
+                           bool isMandatory,
                            bool isSerializable) :
     Property(name, label, isSerializable),
     _elementType(eltType),
     _linkedElementType(linkedEltType),
     _isEcoreContainment(false),
-    _reverseLinkProperty(nullptr)
+    _reverseLinkProperty(nullptr),
+    _isMandatory(isMandatory)
 {}
 
 
@@ -184,6 +186,13 @@ void LinkProperty::deserializeFromXmiAttribute(Element *element, const QString &
     Q_UNUSED(element);
     Q_UNUSED(xmiValue);
     // No action : the deserialization is managed directly by ElementDao::deserializeElement(QDomNode node)
+}
+
+void LinkProperty::validateElement(Element *element, QStringList &ecoreErrors)
+{
+    if (_isMandatory && getLinkedElements(element).isEmpty())
+        ecoreErrors << QString("Error on '%1': the property '%2' should not be null...").arg(
+                                element->getName()).arg(getLabel());
 }
 
 

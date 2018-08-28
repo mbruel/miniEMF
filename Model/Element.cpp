@@ -61,6 +61,16 @@ QString Element::getDefaultName()
     return defaultName;
 }
 
+void Element::validateLinkProperties(QStringList &ecoreErrors)
+{
+    for (auto it = _propertyValueMap.cbegin(), itEnd = _propertyValueMap.cend(); it != itEnd; ++it)
+    {
+        Property *property = it.key();
+        if (property->isALinkProperty())
+            static_cast<LinkProperty*>(property)->validateElement(this, ecoreErrors);
+    }
+}
+
 //Property *Element::getProperty(QString propertyName)
 //{
 //    return (*propertyMap)[propertyName];

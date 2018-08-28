@@ -44,7 +44,7 @@ protected:
     template< typename TypeAttribute, template <typename> class AttributeProperty>
         AttributeProperty<TypeAttribute> *_create(QMap<QString, Property*> *propertyMap, const QString &name, const char *label, const TypeAttribute & defaultValue = TypeAttribute());
     template< typename PropertyType>     PropertyType     *_create(QMap<QString, Property*> *propertyMap, const QString &name, const char *label);
-    template< typename LinkPropertyType> LinkPropertyType *_create(QMap<QString, Property*> *propertyMap, ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isSerializable = true);
+    template< typename LinkPropertyType> LinkPropertyType *_create(QMap<QString, Property*> *propertyMap, ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable = true);
 
 
     // Ecore specific methods (generated)
@@ -70,9 +70,9 @@ template< typename PropertyType> PropertyType *PropertyFactory::_create(QMap<QSt
     return property;
 }
 
-template< typename LinkPropertyType> LinkPropertyType *PropertyFactory::_create(QMap<QString, Property *> *propertyMap, ElementType * const eltType, ElementType * const linkedEltType, const QString &name, const char *label, bool isSerializable)
+template< typename LinkPropertyType> LinkPropertyType *PropertyFactory::_create(QMap<QString, Property *> *propertyMap, ElementType * const eltType, ElementType * const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable)
 {
-    LinkPropertyType *property = new LinkPropertyType(eltType, linkedEltType, name, label, isSerializable);
+    LinkPropertyType *property = new LinkPropertyType(eltType, linkedEltType, name, label, isMandatory, isSerializable);
     Element::addPropertyToMap(propertyMap, property);
     return property;
 }
