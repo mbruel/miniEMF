@@ -1,21 +1,19 @@
 #ifndef MEETING_H
 #define MEETING_H
 
-#include "Model/Element.h"
+#include "Model/MObject.h"
 #include <QDateTime>
 
-template<typename TypeAttribute> class AttributeProperty;
-
-class Meeting : public Element
+class Meeting : public MObject
 {
 public:
-    Meeting(): Element(sClassPropertyMap) {}
+    Meeting();
     ~Meeting();
 
-    // ELEMENT TYPE
-    static ElementType *TYPE;
-    ElementType *getElementType() const override { return TYPE; }
-    static Element *createElement() {return new Meeting();}
+    // MObject TYPE
+    static MObjectType *TYPE;
+    MObjectType *getModelObjectType() const override { return TYPE; }
+    static MObject *createModelObject() {return new Meeting();}
 
 
     // PROPERTIES
@@ -29,12 +27,12 @@ public:
 
     // Getters
     QDateTime getDate();
-    ElemMap *getParticipants();
+    MObjectMap *getParticipants();
 
 
     // Setters
     void setDate(QDateTime value);
-    void setParticipants(ElemList &values);
+    void setParticipants(const MObjectList &values);
 
     // Others
     QString getInfo();

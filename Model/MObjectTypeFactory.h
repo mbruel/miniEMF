@@ -24,45 +24,45 @@
 
 
 #include "Utils/PureStaticClass.h"
-#include "Model/Element.h"
+#include "MObject.h"
 #include <QString>
 #include <QMap>
 #include <QVariant>
 
-class ElementType;
+class MObjectType;
 
-class ElementTypeFactory
+class MObjectTypeFactory
 {
 protected:
-    QMap<QString, ElementType*> _elementTypes;
+    QMap<QString, MObjectType*> _mObjectTypes;
 
 public:
     virtual void initStatics() = 0;
-    virtual QList<ElementType*> getRootElementTypes() = 0;
+    virtual QList<MObjectType*> getRootModelObjectTypes() = 0;
 
-    virtual ~ElementTypeFactory() = default;
+    virtual ~MObjectTypeFactory() = default;
 
-    void initElementTypes();
+    void initModelObjectTypes();
 
-    inline ElementType *getElementTypeByName(const QString &name);
-    ElementType *getElementTypeById(int id);
-    ElementType *getElementTypeFromQVariant(const QVariant &variant);
+    inline MObjectType *getModelObjectTypeByName(const QString &name);
+    MObjectType *getModelObjectTypeById(int id);
+//    MObjectType *getModelObjectTypeFromQVariant(const QVariant &variant);
 
 protected:
-    ElementTypeFactory() : _elementTypes(){}
-    ElementType *_createType(int id, const QString &name, const char *label, ElementCreator eltCreator = &Element::createElement, bool isInstanciable = true);
+    MObjectTypeFactory();
+    MObjectType *_createType(int id, const QString &name, const char *label, ModelObjectCreator eltCreator = &MObject::createModelObject, bool isInstanciable = true);
 
-    virtual void defineDerivedElementTypesFromEcore() = 0;
+    virtual void defineDerivedModelObjectTypesFromEcore() = 0;
 
 private:
-    void _makeAllElementTypeDeriveFromElement();
+    void _makeAllModelObjectTypeDeriveFromModelObject();
 
 };
 
 
-ElementType *ElementTypeFactory::getElementTypeByName(const QString &name)
+MObjectType *MObjectTypeFactory::getModelObjectTypeByName(const QString &name)
 {
-    return _elementTypes.value(name, nullptr);
+    return _mObjectTypes.value(name, nullptr);
 }
 
 #endif // ELEMENTTYPEFACTORY_H

@@ -25,7 +25,7 @@
 #include "Utils/Singleton.h"
 #include <QString>
 #include <QVariant>
-#include "Model/Element.h"
+#include "Model/MObject.h"
 #include "Utils/XmiWriter.h"
 
 class QDomDocument;
@@ -34,8 +34,8 @@ class QXmlStreamWriter;
 class QFile;
 
 class Model;
-class ElementLinking;
-
+class MObjectLinkings;
+class QXmlStreamReader;
 
 class XMIService : public Singleton<XMIService>
 {
@@ -44,11 +44,19 @@ class XMIService : public Singleton<XMIService>
 public:
 
     bool initImportXMI(const QString &xmiPath);
-    void loadXMI(Model *model);
+    void loadXMI(Model *model, bool createDefaultObjects = true);
     bool writeXMI(Model *model, const QString &xmiPath, const QString &applicationName,
                   XmiWriter::XMI_TYPE xmiType = XmiWriter::XMI_TYPE::FULL_DUMP);
 
-    bool exportXMI(Element *elemToExport, Model *model, const QString &xmiPath, const QString &applicationName);
+    bool exportXMI(MObject *elemToExport, Model *model, const QString &xmiPath, const QString &applicationName);
+
+
+
+    MObject *deserializeModelObject(Model *model,
+                                    QXmlStreamReader &xmlReader,
+                                    MObjectType *mObjectType,
+                                    const QString &endTag,
+                                    QSet<MObjectLinkings *> &elementLinkings);
 
 private:
     XMIService();
@@ -57,30 +65,31 @@ private:
     QDomDocument *_docXMI;
     Model        *_model;
 
-    Element *deserializeElement(QDomNode node, ElementType *elementType, QSet<ElementLinking *> *elementLinkings);
+    MObject *deserializeModelObject(QDomNode node, MObjectType *mObjectType, QSet<MObjectLinkings *> *objectLinks);
 
-    void initFromNode(Element *element, const QDomNode &node);
+    void initFromNode(MObject *mObject, const QDomNode &node);
 
-    void setNNPropertyValue(QString ids, LinkToManyProperty *property, Element *element);
-    void setNNOrderedPropertyValue(QString ids, OrderedLinkToManyProperty *property, Element *element);
+    void setNNPropertyValue(QString ids, LinkToManyProperty *property, MObject *mObject);
+    void setNNOrderedPropertyValue(QString ids, OrderedLinkToManyProperty *property, MObject *mObject);
 };
 
 
-class ElementLinking
+class MObjectLinkings
 {
 public:
-    ElementLinking(Element *const element, LinkProperty *const linkProperty, const QString &linkValue):
-        _element(element), _linkProperty(linkProperty), _linkValue(linkValue) {}
-    ~ElementLinking(){}
+    MObjectLinkings(MObject *const mObject, LinkProperty *const linkProperty, const QString &linkValue):
+        _mObject(mObject), _linkProperty(linkProperty), _linkValue(linkValue) {}
+    ~MObjectLinkings(){}
 
-    Element      *getElement()      const { return _element; }
+    MObject      *getModelObject()      const { return _mObject; }
     LinkProperty *getLinkProperty() const { return _linkProperty; }
     QString       getLinkValue()    const { return _linkValue; }
 
 private:
-    Element       *const _element;
+    MObject       *const _mObject;
     LinkProperty  *const _linkProperty;
     const QString        _linkValue;
 };
+
 
 #endif // XMISERVICE_H

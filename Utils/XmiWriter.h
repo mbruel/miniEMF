@@ -28,8 +28,8 @@
 #include <QList>
 #include <QDateTime>
 
-class ElementType;
-class Element;
+class MObjectType;
+class MObject;
 class Model;
 class QXmlStreamWriter;
 class QFile;
@@ -39,7 +39,8 @@ class XmiWriter
 public:
     enum class XMI_TYPE {FULL_DUMP, EXPORT};
 
-    explicit XmiWriter(Model *model, QFile *file);
+    XmiWriter(Model *model, QFile *file);
+    XmiWriter(Model *model, QXmlStreamWriter *xmlWriter);
     virtual ~XmiWriter();
 
     XmiWriter(const XmiWriter &other) = delete;
@@ -51,7 +52,7 @@ public:
     void writeStartTag(const QString &applicationName, XMI_TYPE xmiType);
     void writeEndDocument();
 
-    void write(ElementType *elementType);
+    void write(MObjectType *mObjectType);
 
     void writeStartElement(const QString &tagName);
     void writeEndElement();
@@ -60,13 +61,15 @@ public:
     void addAttribute(const QString &name, bool value);
     void addAttribute(const QString &name, int value);
     void addAttribute(const QString &name, double value);
+    void addAttribute(const QString &name, float value);
     void addAttribute(const QString &name, const QDateTime &value);
-    void addAttribute(const QString &name, Element *element);
-    void addAttribute(const QString &name, const QList<Element*> &elements);
+    void addAttribute(const QString &name, MObject *mObject);
+    void addAttribute(const QString &name, const QList<MObject*> &mObjects);
 
 private:
     Model            *_model;
     QXmlStreamWriter *_xmlStreamWriter;
+    bool              _ownStreamWriter;
 
     static const QMap<XMI_TYPE, QString> sXmiStartTags;
 };

@@ -1,17 +1,17 @@
 #ifndef PERSON_H
 #define PERSON_H
 
-#include "Model/Element.h"
-class Person : public Element
+#include "Model/MObject.h"
+class Person : public MObject
 {
 public:
-    Person(): Element(sClassPropertyMap) {}
+    Person();
     ~Person();
 
-    // ELEMENT TYPE
-    static ElementType *TYPE;
-    ElementType *getElementType() const override { return TYPE; }
-    static Element *createElement() {return new Person();}
+    // MObject TYPE
+    static MObjectType *TYPE;
+    MObjectType *getModelObjectType() const override { return TYPE; }
+    static MObject *createModelObject() {return new Person();}
 
 
     // PROPERTIES
@@ -31,17 +31,17 @@ public:
     int getSex();
     QString getSexName();
     Person *getPartner();
-    QSet<Element *> *getParents();
-    ElemMap *getChilds();
-    ElemMultiMap *getMeetings();
+    QSet<MObject *> *getParents();
+    MObjectMap *getChilds();
+    MObjectMultiMap *getMeetings();
 
 
     // Setters
     void setAge(int value);
     void setSex(const QString &value);
-    void setPartner(Element *value);
-    void setParents(ElemSet *values);
-    void setChilds(ElemMap *values);
+    void setPartner(MObject *value);
+    void setParents(const MObjectList &values);
+    void setChilds(const MObjectList &values);
 
 
     // Others

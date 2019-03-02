@@ -3,17 +3,21 @@
 #include <QString>
 
 // Type
-ElementType *Meeting::TYPE = Q_NULLPTR;
+MObjectType *Meeting::TYPE = Q_NULLPTR;
 
 // Properties
-QMap<QString, Property*> *Meeting::sClassPropertyMap = Q_NULLPTR;
+QMap<QString, Property*> *Meeting::sClassPropertyMap     = Q_NULLPTR;
 DateTimeProperty         *Meeting::PROPERTY_date         = Q_NULLPTR;
 MapLinkProperty          *Meeting::PROPERTY_participants = Q_NULLPTR;
 
+Meeting::Meeting(): MObject(sClassPropertyMap) {}
+
 Meeting::~Meeting()
 {
+#ifdef __HIDE_ELEMENT_ON_DESTRUCTION__
     if (isInModel())
-        hideFromLinkedElements();
+        hideFromLinkedModelObjects();
+#endif
 }
 
 QVariant Meeting::getPropertyMapKey(Property *mapProperty)
@@ -22,11 +26,11 @@ QVariant Meeting::getPropertyMapKey(Property *mapProperty)
     return getDate();
 }
 
-QDateTime Meeting::getDate() { return PROPERTY_date->getValue(this); }
-ElemMap *Meeting::getParticipants() { return PROPERTY_participants->getValues(this); }
+QDateTime   Meeting::getDate()         { return PROPERTY_date->getValue(this); }
+MObjectMap *Meeting::getParticipants() { return PROPERTY_participants->getValues(this); }
 
-void Meeting::setDate(QDateTime value) { PROPERTY_date->setValue(this, value); }
-void Meeting::setParticipants(ElemList &values){ PROPERTY_participants->updateValue(this, values); }
+void Meeting::setDate(QDateTime value)            { PROPERTY_date->setValue(this, value); }
+void Meeting::setParticipants(const MObjectList &values){ PROPERTY_participants->updateValue(this, values); }
 
 QString Meeting::getInfo()
 {
@@ -34,7 +38,7 @@ QString Meeting::getInfo()
     info += " at " + getDate().toString("ddd MMMM d hh:mm:ss.zzz");
     info += " with: ";
     ushort i = 0;
-    ElemMap *participants = getParticipants();
+    MObjectMap *participants = getParticipants();
     for (auto it = participants->cbegin(); it != participants->cend(); ++it)
     {
         if (++i !=0 )

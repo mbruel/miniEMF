@@ -40,34 +40,33 @@ XMIService::~XMIService()
         delete _docXMI;
 }
 
-#define MB_TRACE_loadXMI 1
-Element *XMIService::deserializeElement(QDomNode node, ElementType *elementType, QSet<ElementLinking *> *elementLinkings)
+MObject *XMIService::deserializeModelObject(QDomNode node, MObjectType *mObjectType, QSet<MObjectLinkings *> *objectLinks)
 {
     QString nodeName (node.toElement().tagName());
-    QString strId    (node.toElement().attribute("xmi:id", "").trimmed());
+    QString strId    (node.toElement().attribute("id", "").trimmed());
 
-    Element *element = _model->getElementById(elementType, strId);
-    if(!element)
+    MObject *mObject = _model->getModelObjectById(mObjectType, strId);
+    if(!mObject)
     {
-#ifdef MB_TRACE_loadXMI
-        qDebug() << "[MB_TRACE] create new Element of type: " <<   elementType->getName();
+#ifdef __MB_TRACE_loadXMI__
+        qDebug() << "[MB_TRACE] create new MObject of type: " <<   mObjectType->getName();
 #endif
-        element = elementType->createElement();
-        initFromNode(element, node);
-        _model->add(elementType, element);
+        mObject = mObjectType->createModelObject(0);
+        initFromNode(mObject, node);
+        _model->add(mObjectType, mObject);
     }
-#ifdef MB_TRACE_loadXMI
-    qDebug() << "\n\n[MB_TRACE] deserializeElement element: " << element->getName()
-             << " type: " << element->getElementTypeName()
-             << " (id: " << element->getId();
+#ifdef __MB_TRACE_loadXMI__
+    qDebug() << "\n\n[MB_TRACE] deserializeModelObject mObject: " << mObject->getName()
+             << " type: " << mObject->getModelObjectTypeName()
+             << " (id: " << mObject->getId();
 #endif
 
 
     QMap<QString, LinkProperty*> containmentProperties;
-    for (Property *const property : element->getPropertyList())
+    for (Property *const property : mObject->getPropertyList())
     {
-#ifdef MB_TRACE_loadXMI
-        qDebug() << "[MB_TRACE] deserializeElement property: " << property->getName();
+#ifdef __MB_TRACE_loadXMI__
+        qDebug() << "[MB_TRACE] deserializeModelObject property: " << property->getName();
 #endif
         if (property->isALinkProperty()) // 1> Treatment of a link Property
         {
@@ -76,19 +75,19 @@ Element *XMIService::deserializeElement(QDomNode node, ElementType *elementType,
                 containmentProperties.insert(linkProperty->getName(), linkProperty);
             else if (linkProperty->isEcoreContainer()) // 1.2> Container property is deserialized (both sides of the relationship) directly here
                 continue; // Nothing to do, it is set by the parent
-            else // 1.3> Other link propeties are stored for a post treatment (treated when all elements have been identified)
+            else // 1.3> Other link propeties are stored for a post treatment (treated when all mObjects have been identified)
             {
                 // Get literal value from XMI and create intermediate object
                 QString strAttr = node.toElement().attribute(property->getName(), "");
                 if (!strAttr.isEmpty())
                 {
-#ifdef MB_TRACE_loadXMI
-                    qDebug()<< "[MB_TRACE] elementLinkings->insert : elem: " << element->getName()
+#ifdef __MB_TRACE_loadXMI__
+                    qDebug()<< "[MB_TRACE] elementLinkings->insert : mObj: " << mObject->getName()
                             << ", linkProperty: " << linkProperty->getName()
-                            <<" (type: " << linkProperty->getElementType()->getName()
-                           << ", linkedElementType: " << linkProperty->getLinkedElementType()->getName() << ") value : " << strAttr;
+                            <<" (type: " << linkProperty->getModelObjectType()->getName()
+                           << ", linkedModelObjectType: " << linkProperty->getLinkedModelObjectType()->getName() << ") value : " << strAttr;
 #endif
-                    elementLinkings->insert(new ElementLinking(element, linkProperty, strAttr));
+                    objectLinks->insert(new MObjectLinkings(mObject, linkProperty, strAttr));
                 }
             }
         }
@@ -96,10 +95,10 @@ Element *XMIService::deserializeElement(QDomNode node, ElementType *elementType,
         {
             // Get literal value from XMI and deserialize it
             QString strAttr = node.toElement().attribute(property->getName(), "");
-            property->deserializeFromXmiAttribute(element, strAttr);
+            property->deserializeFromXmiAttribute(mObject, strAttr);
         }
     }
-
+    mObject->initDefaultProperties();
 
     // Deserialize Child nodes
     QDomNodeList childNodes = node.childNodes();
@@ -108,48 +107,58 @@ Element *XMIService::deserializeElement(QDomNode node, ElementType *elementType,
         QDomNode childNode    = childNodes.item(i);
         QString  childTagName = childNode.toElement().tagName();
 
-        // Identification of Child node's Element Type
+        // Identification of Child node's MObject Type
         LinkProperty *linkProperty     = containmentProperties[childTagName];
-        ElementType  *childElementType = linkProperty->getLinkedElementType();
-
-        if (childElementType->isDerived())
+        if (!linkProperty)
         {
-            QString xsiTypeValue = childNode.toElement().attribute("xsi:type", "");
+            qDebug() << "[XMIService::deserializeModelObject] ERROR xmi: the property '"
+                     << childTagName << "' doesn't exist for the object: " << mObjectType->getName();
+            continue;
+        }
+        MObjectType  *childModelObjectType = linkProperty->getLinkedModelObjectType();
+
+        if (childModelObjectType->isDerived())
+        {
+            QString xsiTypeValue = childNode.toElement().attribute("MObjectType", "");
             if (!xsiTypeValue.isEmpty())
             {
                 QStringList xsiTypeValueSplitted = xsiTypeValue.split(":");
                 if (xsiTypeValueSplitted.size() == 2)
                 {
                     QString realEltTypeName = xsiTypeValueSplitted.at(1).trimmed();
-                    childElementType = _model->getElementTypeByName(realEltTypeName);
+                    childModelObjectType = _model->getModelObjectTypeByName(realEltTypeName);
                 }
             }
         }
         // Deserialization of child node
-        Element *childElement = deserializeElement(childNode, childElementType, elementLinkings);
-
-if (elementType->getName() == "DataSet")
-    qDebug() << "[MB_TRACE][deserializeElement] child for property " << linkProperty->getName();
-
-        linkProperty->addLink(element, childElement);
-
+        MObject *childElement = deserializeModelObject(childNode, childModelObjectType, objectLinks);
+        linkProperty->addLink(mObject, childElement);
         LinkToOneProperty *containerProp = static_cast<LinkToOneProperty*>(linkProperty->getReverseLinkProperty());
         if (containerProp)
-            containerProp->setValue(childElement, element);
+            containerProp->setValue(childElement, mObject);
     }
 
-    return element;
+    return mObject;
 }
 
-void XMIService::initFromNode(Element *element, const QDomNode &node)
+#include <QRegularExpression>
+void XMIService::initFromNode(MObject *mObject, const QDomNode &node)
 {
-    QString strId          (node.toElement().attribute("xmi:id", ""));
+    QString strId          (node.toElement().attribute("id", ""));
     QString strName        (node.toElement().attribute("name", ""));
 //    QString strDescription (node.toElement().attribute("description", ""));
 
-    element->setId(strId);
-    element->setName(strName);
-//    element->setDescription(strDescription);
+    mObject->setId(strId);
+    mObject->setName(strName);
+//    mObject->setDescription(strDescription);
+
+    QRegularExpression regExp("^(\\d+)_(\\d*)_(\\d+)$");
+    QRegularExpressionMatch match = regExp.match(strId);
+     if (match.hasMatch())
+     {
+         int typeId = match.captured(3).toInt();
+         mObject->getModelObjectType()->updateMaxId(typeId);
+     }
 }
 
 bool XMIService::initImportXMI(const QString &xmiPath)
@@ -177,74 +186,31 @@ bool XMIService::initImportXMI(const QString &xmiPath)
     return true;
 }
 
-void XMIService::loadXMI(Model *model)
+void XMIService::loadXMI(Model *model, bool createDefaultObjects)
 {
     _model = model;
 
-    QSet<ElementLinking*> elementLinks;
+    QSet<MObjectLinkings*> elementLinks;
     for(QDomNode node = _docXMI->documentElement().firstChild(); !node.isNull(); node = node.nextSibling())
     {
         QString nodeType(node.nodeName()); //osam.functional:Function
         QStringList nodeTypePath = nodeType.split(':');
         if (nodeTypePath.size() == 2)
             nodeType = nodeTypePath.at(1);
-        ElementType *elementType = _model->getElementTypeByName(nodeType);
-        Q_ASSERT( elementType != 0);
+        MObjectType *mObjectType = _model->getModelObjectTypeByName(nodeType);
+        Q_ASSERT( mObjectType != nullptr);
 
-        deserializeElement(node, elementType, &elementLinks);
+        deserializeModelObject(node, mObjectType, &elementLinks);
     }
 
-    // Log the number of elements loaded by elementType
-    _model->dumpElementTypeMap();
-
-
-    // Deserialize links between elements
-    for (ElementLinking *elementLinking : elementLinks)
+    // Deserialize links between mObjects
+    for (MObjectLinkings *elementLinking : elementLinks)
     {
-        Element      *element      = elementLinking->getElement();
+        MObject      *mObject      = elementLinking->getModelObject();
         LinkProperty *linkProperty = elementLinking->getLinkProperty();
         QString       linkValue(elementLinking->getLinkValue().trimmed());
 
-        linkProperty->setValueFromXMIStringIdList(element, linkValue, _model);
-/*
-        if (linkProperty->isALinkToOneProperty())
-        {
-
-//if (linkProperty->getName() == "failedFct")
-//{
-//     qDebug() << "[MB_TRACE] [loadXMI]: elementLinking failedFct !!!"
-//              << " linkToOneProperty->getLinkedElementType(): " << linkProperty->getLinkedElementType()->getName();
-//}
-            // Deserialization of LinkToOneProperty
-            LinkToOneProperty *linkToOneProperty = static_cast<LinkToOneProperty*>(linkProperty);
-            Element *linkedElt = _model->getElementById(linkToOneProperty->getLinkedElementType(), linkValue);
-            linkToOneProperty->setValue(element, linkedElt);
-#ifdef MB_TRACE_loadXMI
-            if (linkedElt)
-            {
-                qDebug() << "[MB_TRACE] Element: " << element->getName()
-                         << ", linkToOneProperty->getName: " << linkToOneProperty->getName()
-                         << ", linkedElt: " << linkedElt->getName();
-            } else
-            {
-                qDebug() << "[MB_TRACE] Element: " << element->getName()
-                         << ", linkToOneProperty->getName: " << linkToOneProperty->getName()
-                         << ", linkedElt: IS NULL!!!!";
-            }
-#endif
-        }
-        else
-        {
-            // Deserialization of LinkToManyProperty or OrderedLinkToManyProperty
-#ifdef MB_TRACE_loadXMI
-            qDebug() << "[MB_TRACE] Element: " << element->getName()
-                     << ", linkProperty: " << linkProperty->getName();
-            qDebug() << ", linkProperty->getLinkedElementType: " << linkProperty->getLinkedElementType()->getName()
-                     << ", linkValue: " << linkValue;
-#endif
-            linkProperty->setValueFromXMIStringIdList(element, linkValue, _model);
-        }
-*/
+        linkProperty->setValueFromXMIStringIdList(mObject, linkValue, _model);
     }
 
     qDeleteAll(elementLinks);
@@ -258,6 +224,8 @@ void XMIService::loadXMI(Model *model)
 
 bool XMIService::writeXMI(Model *model, const QString &xmiPath, const QString &applicationName, XmiWriter::XMI_TYPE xmiType)
 {
+model->dumpModelObjectTypeMap("[MB_TRACE] saving xmi...");
+
     _model = model;
     // Open file in write mode
     QFile file(xmiPath);
@@ -270,7 +238,7 @@ bool XMIService::writeXMI(Model *model, const QString &xmiPath, const QString &a
     XmiWriter xmiWriter(model, &file);
     xmiWriter.writeStartTag(applicationName, xmiType);
 
-    for (ElementType *rootType : _model->getRootElementTypes())
+    for (MObjectType *rootType : _model->getRootModelObjectTypes())
         xmiWriter.write(rootType);
 
     xmiWriter.writeEndDocument();
@@ -279,13 +247,105 @@ bool XMIService::writeXMI(Model *model, const QString &xmiPath, const QString &a
     return true;
 }
 
-bool XMIService::exportXMI(Element *elemToExport, Model *model, const QString &xmiPath, const QString &applicationName)
+bool XMIService::exportXMI(MObject *elemToExport, Model *model, const QString &xmiPath, const QString &applicationName)
 {
     Model subModel(model->_typeFactory, model->_toolName, model->_exportVersion,
-                   model->_exportDescription, model->_user, model->_date);
+                   model->_exportDescription, model->_id, model->_date);
 
-    subModel.shallowCopySubsetOfMainModel(model, {elemToExport});
+    subModel.shallowCopySubsetOfMainModel({elemToExport});
     return writeXMI(&subModel, xmiPath, applicationName, XmiWriter::XMI_TYPE::EXPORT);
+}
+
+#include <QXmlStreamReader>
+
+
+MObject *XMIService::deserializeModelObject(
+        Model *model,
+        QXmlStreamReader &xmlReader,
+        MObjectType *mObjectType,
+        const QString &endTag,
+        QSet<MObjectLinkings *> &elementLinkings)
+{
+    MObject *mObject = mObjectType->createModelObject(0);
+    mObject->setId(xmlReader.attributes().value("id").toString());
+
+    model->add(mObjectType, mObject);
+
+    qDebug() << "[XMIService::deserializeModelObject] >>>>> new " << mObjectType->getName()
+             << ": " << mObject->getName() << " (id: " << mObject->getId() << ")"
+             << " endTag: " << endTag;
+
+    // First do all the non containment properties that are on the current line
+    QMap<QString, Property *> nonContainmentProps = mObject->getNonContainmentProperties();
+    for (auto it = nonContainmentProps.cbegin(), itEnd = nonContainmentProps.cend(); it != itEnd ; ++it)
+    {
+        const QString & propName = it.key();
+        Property *const property = it.value();
+        QString strAttr = xmlReader.attributes().value(propName).toString();
+        if (property->isAttributeProperty())
+            property->deserializeFromXmiAttribute(mObject, strAttr);
+        else
+            elementLinkings.insert(new MObjectLinkings(mObject, static_cast<LinkProperty*>(property), strAttr));
+    }
+
+    mObject->initDefaultProperties();
+
+    // Now all the containment properties (childs) until we reach the endTag
+    QMap<QString, LinkProperty *>  containmentProps = mObject->getContainmentProperties();
+    do
+    {
+        QXmlStreamReader::TokenType tokenType = xmlReader.readNext();
+        if (xmlReader.name() == endTag && tokenType == QXmlStreamReader::EndElement)
+        {
+            qDebug() << "[XMIService::deserializeModelObject] <<<< end " << mObjectType->getName()
+                     << ": " << mObject->getName() << " (id: " << mObject->getId() << ")"
+                     << " endTag: " << endTag;
+            break;
+        }
+
+        QString       propertyName = xmlReader.name().toString();
+        if (propertyName.isEmpty())
+            continue; // avoid TokenType::Characters
+
+        LinkProperty *linkProperty = containmentProps.value(propertyName);
+        if (!linkProperty)
+        {
+            qDebug() << "[XMIService::loadProject] Error on " << mObjectType->getName()
+                     << ": couldn't find child named: " << propertyName
+                     << " (object id: " << mObject->getId() << ")"
+                     << " endTag: " << endTag
+                     << ", tokenType: " << tokenType
+                     << ", error: " << xmlReader.errorString();
+        }
+        else
+        {
+            MObjectType *childType = linkProperty->getLinkedModelObjectType();
+            if (childType->isDerived())
+            {
+                QString xsiTypeValue = xmlReader.attributes().value("MObjectType").toString();
+                if (!xsiTypeValue.isEmpty())
+                {
+                    QStringList xsiTypeValueSplitted = xsiTypeValue.split(":");
+                    if (xsiTypeValueSplitted.size() == 2)
+                    {
+                        QString realChildType = xsiTypeValueSplitted.at(1).trimmed();
+                        childType = model->getModelObjectTypeByName(realChildType);
+                        qDebug() << "[XMIService::deserializeModelObject] " << mObjectType->getName()
+                                 << ": " << mObject->getName() << " (id: " << mObject->getId() << ")"
+                                 << " has a derived child: " << realChildType;
+
+                    }
+                }
+            }
+            MObject *childElement = deserializeModelObject(model, xmlReader, childType, propertyName, elementLinkings);
+            linkProperty->addLink(mObject, childElement);
+            LinkToOneProperty *containerProp = static_cast<LinkToOneProperty*>(linkProperty->getReverseLinkProperty());
+            if (containerProp)
+                containerProp->setValue(childElement, mObject);
+        }
+    } while (!xmlReader.atEnd());
+
+    return mObject;
 }
 
 

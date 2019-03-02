@@ -20,31 +20,37 @@
 //========================================================================
 
 #include "Property.h"
-#include "Element.h"
+#include "MObject.h"
 
+const int    Property::INT_INFINITE_POS = std::numeric_limits<int>::max();
+const int    Property::INT_INFINITE_NEG = std::numeric_limits<int>::min();
+const float  Property::FLT_INFINITE_POS = std::numeric_limits<float>::max();
+const float  Property::FLT_INFINITE_NEG = -std::numeric_limits<float>::max();
+const double Property::DBL_INFINITE_POS = std::numeric_limits<double>::max();
+const double Property::DBL_INFINITE_NEG = -std::numeric_limits<double>::max();
 
 
 #include <QCoreApplication>
 Property::Property(const QString &name, const char *label, bool isSerializable):
-    _name(name), _label(label), _unit(), _serializable(isSerializable)
+    _name(name), _label(label), _unit(""), _serializable(isSerializable)
 {}
 
 QString Property::getLabel() const { return QCoreApplication::translate("Property", _label);} //QObject::tr(_label); }
 
-void Property::updateValue(Element *const element, QVariant value)
+void Property::updateValue(MObject *const mObject, QVariant value)
 {
-    element->setPropertyValueFromQVariant(this, value);
+    mObject->setPropertyValueFromQVariant(this, value);
 }
 
 QVariant Property::convertIntoUpdatableValue(QVariant value) { return value; }
 
-ElemList Property::getMapValuesInInsertionOrder(const ElemMap &map)
+MObjectList Property::getMapValuesInInsertionOrder(const MObjectMap &map)
 {
-    ElemList values;
+    MObjectList values;
     for (const QVariant & key : map.uniqueKeys())
     {
-        ElemList elems = map.values(key);
-        auto it = elems.cend(), itStart = elems.cbegin();
+        MObjectList mObjects = map.values(key);
+        auto it = mObjects.cend(), itStart = mObjects.cbegin();
         do
         { // we do it backwards cause insertMulti insert duplicate in front and values send back in the same order.
             --it;
@@ -57,7 +63,14 @@ ElemList Property::getMapValuesInInsertionOrder(const ElemMap &map)
 
 
 
+uIntProperty::uIntProperty(const QString &name, const char *label, const int &defaultValue) : IntProperty(name, label, defaultValue){}
+uIntProperty::~uIntProperty(){}
 
+uDoubleProperty::uDoubleProperty(const QString &name, const char *label, const double &defaultValue) : DoubleProperty(name, label, defaultValue){}
+uDoubleProperty::~uDoubleProperty(){}
+
+PerCentProperty::PerCentProperty(const QString &name, const char *label, const double &defaultValue) : DoubleProperty(name, label, defaultValue){}
+PerCentProperty::~PerCentProperty(){}
 
 // #######################
 // #### ENUM PROPERTY ####
@@ -66,9 +79,9 @@ EnumProperty::EnumProperty(const QString &name, const char *label, int defaultVa
     AttributeProperty<int>(name, label, defaultValue), _enumValues(){}
 
 
-QString EnumProperty::getValueAsString(Element *element)
+QString EnumProperty::getValueAsString(MObject *mObject)
 {
-    return QCoreApplication::translate("Constant", _enumValues.value(getValue(element)).toStdString().c_str());
+    return QCoreApplication::translate("Constant", _enumValues.value(getValue(mObject)).toStdString().c_str());
 }
 
 void EnumProperty::setEnumValues(const QMap<int, QString> &enumValues)
@@ -86,14 +99,14 @@ QStringList EnumProperty::getAllValues()
     return _enumValues.values();
 }
 
-void EnumProperty::serializeAsXmiAttribute(XmiWriter *xmiWriter, Element *element)
+void EnumProperty::serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject)
 {
-    xmiWriter->addAttribute(_name, getEnumValueByKey(getValue(element)));
+    xmiWriter->addAttribute(_name, getEnumValueByKey(getValue(mObject)));
 }
 
-void EnumProperty::deserializeFromXmiAttribute(Element *element, const QString &xmiValue)
+void EnumProperty::deserializeFromXmiAttribute(MObject *mObject, const QString &xmiValue)
 {
-    setValue(element, getEnumKeyByValue(xmiValue));
+    setValue(mObject, getEnumKeyByValue(xmiValue));
 }
 
 QString EnumProperty::getEnumValueByKey(int key) const
@@ -107,12 +120,15 @@ int EnumProperty::getEnumKeyByValue(QString value) const
 }
 
 #ifdef __USE_HMI__
-QWidget *EnumProperty::getEditor(Element * const elem, QWidget *parent)
+QWidget *EnumProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
 {
+    Q_UNUSED(model)
     QComboBox *combobox = new QComboBox(parent);
     ushort index = 0;
-    int currentValue = getValue(elem), currentValueIndex = 0;
-    for (auto it = _enumValues.cbegin() ; it != _enumValues.cend() ; ++it)
+    int currentValue = 0, currentValueIndex = 0;
+    if (mObj)
+        currentValue = getValue(mObj);
+    for (auto it = _enumValues.cbegin() , itEnd = _enumValues.cend(); it != itEnd ; ++it)
     {
         combobox->addItem(it.value(), it.key());
         if (it.key() == currentValue)
@@ -120,13 +136,29 @@ QWidget *EnumProperty::getEditor(Element * const elem, QWidget *parent)
         ++index;
     }
     combobox->setCurrentIndex(currentValueIndex);
+    if (mObj && mObj->isReadOnly())
+        combobox->setEnabled(false);
+
     return combobox;
 }
 
-QVariant EnumProperty::getEditorUpdatedVariant(Element * const elem, QWidget *editor)
+int EnumProperty::getEditorValue(QWidget *editor)
+{
+    return static_cast<QComboBox*>(editor)->currentData().toInt();
+}
+
+void EnumProperty::setEditorValue(QWidget *editor, int value)
 {
     QComboBox *combobox = static_cast<QComboBox*>(editor);
-    int newVal = combobox->currentData().toInt(), oldVal = getValue(elem);
+    int index = combobox->findData(value);
+    if (index != -1)
+        combobox->setCurrentIndex(index);
+}
+
+QVariant EnumProperty::getEditorUpdatedVariant(MObject * const mObj, QWidget *editor)
+{
+    QComboBox *combobox = static_cast<QComboBox*>(editor);
+    int newVal = combobox->currentData().toInt(), oldVal = getValue(mObj);
     if (newVal != oldVal)
         return combobox->currentData();
     else
@@ -139,15 +171,14 @@ QVariant EnumProperty::getEditorUpdatedVariant(Element * const elem, QWidget *ed
 // #######################
 // #### LINK PROPERTY ####
 
-LinkProperty::LinkProperty(ElementType *const eltType,
-                           ElementType *const linkedEltType,
+LinkProperty::LinkProperty(MObjectType *const eltType,
+                           MObjectType *const linkedEltType,
                            const QString &name,
-                           const char *label,
-                           bool isMandatory,
+                           const char *label, bool isMandatory,
                            bool isSerializable) :
     Property(name, label, isSerializable),
-    _elementType(eltType),
-    _linkedElementType(linkedEltType),
+    _mObjectType(eltType),
+    _linkedModelObjectType(linkedEltType),
     _isEcoreContainment(false),
     _reverseLinkProperty(nullptr),
     _isMandatory(isMandatory)
@@ -168,31 +199,31 @@ bool LinkProperty::isEcoreContainer() const
     return false;
 }
 
-void LinkProperty::serializeAsXmiAttribute(XmiWriter *xmiWriter, Element *element)
+void LinkProperty::serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject)
 {
-    xmiWriter->addAttribute(_name, getLinkedElements(element, true));
+    xmiWriter->addAttribute(_name, getLinkedModelObjects(mObject, true));
 }
 
 
 void LinkProperty::setReverseLinkProperty(LinkProperty *reverseLinkProperty)
 {
     _reverseLinkProperty = reverseLinkProperty;
-//    this->elementType = reverseLinkProperty->getLinkedElementType();
+//    this->mObjectType = reverseLinkProperty->getLinkedModelObjectType();
 }
 
 
-void LinkProperty::deserializeFromXmiAttribute(Element *element, const QString &xmiValue)
+void LinkProperty::deserializeFromXmiAttribute(MObject *mObject, const QString &xmiValue)
 {
-    Q_UNUSED(element);
+    Q_UNUSED(mObject);
     Q_UNUSED(xmiValue);
-    // No action : the deserialization is managed directly by ElementDao::deserializeElement(QDomNode node)
+    // No action : the deserialization is managed directly by ElementDao::deserializeModelObject(QDomNode node)
 }
 
-void LinkProperty::validateElement(Element *element, QStringList &ecoreErrors)
+void LinkProperty::validateModelObject(MObject *mObject, QStringList &ecoreErrors)
 {
-    if (_isMandatory && getLinkedElements(element).isEmpty())
+    if (_isMandatory && getLinkedModelObjects(mObject).isEmpty())
         ecoreErrors << QString("Error on '%1': the property '%2' should not be null...").arg(
-                                element->getName()).arg(getLabel());
+                           mObject->getName()).arg(getLabel());
 }
 
 
@@ -201,182 +232,248 @@ void LinkProperty::validateElement(Element *element, QStringList &ecoreErrors)
 
 QVariant LinkToOneProperty::createNewInitValue()
 {
-    Element *dummy = nullptr;
-    return QVariant::fromValue(dummy);
+    if (_defaultLinkedObject)
+        return _defaultLinkedObject->toVariant();
+    else
+        return QVariant::fromValue(static_cast<void*>(_defaultLinkedObject));
 }
 
 
-void LinkToOneProperty::setValues(Element *element, const ElemList &values)
+void LinkToOneProperty::setValues(MObject *mObject, const MObjectList &values)
 {
-    Element *value = nullptr;
+    MObject *value = nullptr;
     if (!values.isEmpty())
         value = *(values.begin());
-    setValue(element, value);
+    setValue(mObject, value);
 }
 
-void LinkToOneProperty::setValueFromXMIStringIdList(Element *element, const QString &ids, Model *model)
+void LinkToOneProperty::setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model)
 {
-    Element *linkedElt = model->getElementById(_linkedElementType, ids.trimmed());
-    if (linkedElt)
-        updateValue(element, QVariant::fromValue(linkedElt));
-}
-
-Element* LinkToOneProperty::getValue(Element* element)
-{
-    if(element)
-        return element->getLinkPropertyValue<Element>(this);
-
-    return nullptr;
-}
-
-void LinkToOneProperty::setValue(Element* element, Element* value)
-{
-    element->setPropertyValueFromElement(this, value);
-}
-
-void LinkToOneProperty::updateValue(Element* element, QVariant value)
-{
-    if (element && value.canConvert<Element*>())
+    QSet<MObjectType *> allPossibleTypes = _linkedModelObjectType->getSuperInstanciableModelObjectTypes();
+    allPossibleTypes.insert(_linkedModelObjectType);
+    QString objectId = ids.trimmed();
+    for (MObjectType *linkedType : allPossibleTypes)
     {
-        Element *newLink = static_cast<Element*>(value.value<Element*>());
-        setValue(element, newLink);
-
-        // update reverse property
-        Element* oldLink = getValue(element);
-        if (_reverseLinkProperty) // Example of linkProperty for which reverseLinkProperty is null : ConstraintSet -> Element)
+        MObject *linkedElt = model->getModelObjectById(linkedType, objectId);
+        if (linkedElt)
         {
-            if (oldLink)
-                _reverseLinkProperty->removeLink(oldLink, element);
-            if (newLink)
-                _reverseLinkProperty->addLink(newLink, element);
+            updateValue(mObject, linkedElt->toVariant());
+            break;
         }
     }
 }
 
-void LinkToOneProperty::updateValue(Element * const element, ElemList &values)
+MObject* LinkToOneProperty::getValue(MObject* mObject)
 {
-    Element *value = nullptr;
+    if(mObject)
+        return mObject->getLinkPropertyValue<MObject>(this);
+
+    return nullptr;
+}
+
+void LinkToOneProperty::setValue(MObject* mObject, MObject* value)
+{
+    mObject->setPropertyValueFromElement(this, value);
+}
+
+void LinkToOneProperty::updateValue(MObject* mObject, QVariant value)
+{
+    if (mObject && value.canConvert<void*>())
+    {
+        MObject* oldLink = getValue(mObject);
+
+        MObject *newLink = static_cast<MObject*>(value.value<void*>());
+        setValue(mObject, newLink);
+
+        // update reverse property
+        if (_reverseLinkProperty) // Example of linkProperty for which reverseLinkProperty is null : ConstraintSet -> MObject)
+        {
+            if (oldLink)
+                _reverseLinkProperty->removeLink(oldLink, mObject);
+            if (newLink)
+                _reverseLinkProperty->addLink(newLink, mObject);
+        }
+    }
+}
+
+void LinkToOneProperty::updateValue(MObject * const mObject, const MObjectList &values)
+{
+    MObject *value = nullptr;
     if (values.size())
         value = *(values.begin());
-    updateValue(element, QVariant::fromValue(value));
+    updateValue(mObject, value->toVariant());
 }
 
-void LinkToOneProperty::addLink(Element* element, Element* elementToAdd)
+void LinkToOneProperty::addLink(MObject* mObject, MObject* mObjectToAdd)
 {
-    setValue(element, elementToAdd);
+    setValue(mObject, mObjectToAdd);
 }
 
-void LinkToOneProperty::removeLink(Element* element, Element* elementToRemove)
+void LinkToOneProperty::removeLink(MObject* mObject, MObject* mObjectToRemove)
 {
-    Q_UNUSED(elementToRemove);
-    setValue(element, nullptr);
+    Q_UNUSED(mObjectToRemove);
+    setValue(mObject, nullptr);
 }
 
 
-QList<Element*> LinkToOneProperty::getLinkedElements(Element* element, bool ordered)
+QList<MObject*> LinkToOneProperty::getLinkedModelObjects(MObject* mObject, bool ordered)
 {
     Q_UNUSED(ordered)
-    QList<Element*> linkedElements;
-    Element *linkedElement = getValue(element);
-    if (linkedElement)
-        linkedElements.append(linkedElement);
+    QList<MObject*> linkedModelObjects;
+    MObject *linkedModelObject = getValue(mObject);
+    if (linkedModelObject)
+        linkedModelObjects.append(linkedModelObject);
 
-    return linkedElements;
+    return linkedModelObjects;
 }
 
 /*
-Element *LinkToOneProperty::getValue(Element * const element)
+MObject *LinkToOneProperty::getValue(MObject * const mObject)
 {
-    ElemSet *values = getValues(element);
+    MObjectSet *values = getValues(mObject);
     if (values->isEmpty())
         return nullptr;
     else
         return *(values->begin());
 }
 
-void LinkToOneProperty::setValue(Element * const element, Element * const value)
+void LinkToOneProperty::setValue(MObject * const mObject, MObject * const value)
 {
-    ElemSet values;
+    MObjectSet values;
     if (value)
         values.insert(value);
-    setValues(element, &values);
+    setValues(mObject, &values);
 }
 
-void LinkToOneProperty::addLink(Element* element, Element* elementToAdd)
+void LinkToOneProperty::addLink(MObject* mObject, MObject* mObjectToAdd)
 {
-    setValue(element, elementToAdd);
+    setValue(mObject, mObjectToAdd);
 }
 
-void LinkToOneProperty::removeLink(Element* element, Element* elementToRemove)
+void LinkToOneProperty::removeLink(MObject* mObject, MObject* mObjectToRemove)
 {
-    Q_UNUSED(elementToRemove);
-    setValue(element, nullptr);
+    Q_UNUSED(mObjectToRemove);
+    setValue(mObject, nullptr);
 }
 
-void LinkToOneProperty::updateValue(Element* element, QVariant value)
+void LinkToOneProperty::updateValue(MObject* mObject, QVariant value)
 {
-    if (element && value.canConvert<Element*>())
+    if (mObject && value.canConvert<void*>())
     {
-        Element *newLink = static_cast<Element*>(value.value<Element*>());
+        MObject *newLink = static_cast<MObject*>(value.value<void*>());
 
         // update reverse property
-        Element* oldLink = getValue(element);
-        if (_reverseLinkProperty) // Example of linkProperty for which reverseLinkProperty is null : ConstraintSet -> Element)
+        MObject* oldLink = getValue(mObject);
+        if (_reverseLinkProperty) // Example of linkProperty for which reverseLinkProperty is null : ConstraintSet -> MObject)
         {
             if (oldLink)
-                _reverseLinkProperty->removeLink(oldLink, element);
+                _reverseLinkProperty->removeLink(oldLink, mObject);
             if (newLink)
-                _reverseLinkProperty->addLink(newLink, element);
+                _reverseLinkProperty->addLink(newLink, mObject);
         }
 
-        setValue(element, newLink);
+        setValue(mObject, newLink);
     }
 }
 
-void LinkToOneProperty::setValueFromXMIStringIdList(Element *element, const QString &ids, Model *model)
+void LinkToOneProperty::setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model)
 {
-    Element *linkedElt = model->getElementById(_linkedElementType, ids.trimmed());
+    MObject *linkedElt = model->getModelObjectById(_linkedModelObjectType, ids.trimmed());
     if (linkedElt)
-        updateValue(element, QVariant::fromValue(linkedElt));
+        updateValue(mObject, linkedElt->toVariant());
 }
 */
 
 #ifdef __USE_HMI__
-#include "Cosi7Application.h"
-QWidget *LinkToOneProperty::getEditor(Element * const elem, QWidget *parent)
+#include <QVariant>
+QWidget *LinkToOneProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
 {
     QComboBox *combobox = new QComboBox(parent);
     ushort index = 0;
-    Element *currentValue = getValue(elem);
-    Model *model = Cosi7Application::instance()->getModel();
+    MObject *currentValue = getValue(mObj);
     if (model)
     {
         if (!isMandatory() || !currentValue)
         {
-            Element *dummyElem = nullptr;
-            combobox->addItem("", QVariant::fromValue(dummyElem));
+            MObject *dummyElem = nullptr;
+            combobox->addItem("", QVariant::fromValue(static_cast<void*>(dummyElem)));
             ++index;
         }
         int currentValueIndex = 0;
-        for (Element *e : model->getElementsOrderedByNames(_linkedElementType))
+        QList<MObject*> possibleLinkedObjects = model->getModelObjectsOrderedByNames(_linkedModelObjectType);
+        if (_defaultLinkedObject && !possibleLinkedObjects.contains(_defaultLinkedObject))
+            possibleLinkedObjects.prepend(_defaultLinkedObject);
+
+        for (MObject *e : possibleLinkedObjects)
         {
-            combobox->addItem(e->getName(), QVariant::fromValue(e));
+            combobox->addItem(e->getIcon(), e->getName(), e->toVariant());
+
             if (e == currentValue)
                 currentValueIndex = index;
             ++index;
         }
         combobox->setCurrentIndex(currentValueIndex);
     }
+    if (mObj && mObj->isReadOnly())
+        combobox->setEnabled(false);
     return combobox;
 }
 
-QVariant LinkToOneProperty::getEditorUpdatedVariant(Element * const elem, QWidget *editor)
+QVariant LinkToOneProperty::getEditorUpdatedVariant(MObject * const mObj, QWidget *editor)
 {
     QComboBox *combobox = static_cast<QComboBox*>(editor);
-    Element *newVal = combobox->currentData().value<Element*>(), *oldVal = getValue(elem);
+    MObject *newVal = static_cast<MObject*>(combobox->currentData().value<void*>()), *oldVal = getValue(mObj);
     if (newVal != oldVal)
         return combobox->currentData();
     else
         return QVariant();
 }
+
+MObject *LinkToOneProperty::getEditorValue(QWidget *editor)
+{
+    QComboBox *combobox = static_cast<QComboBox*>(editor);
+    return static_cast<MObject*>(combobox->currentData().value<void*>());
+}
+
+void LinkToOneProperty::setEditorValue(QWidget *editor, MObject *value)
+{
+    QComboBox *combobox = static_cast<QComboBox*>(editor);
+    int index = combobox->findData(QVariant::fromValue(static_cast<void*>(value)));
+    if (index != -1)
+        combobox->setCurrentIndex(index);
+}
+
+QWidget *LinkToOneProperty::getEditorUsingAlsoDerivedLinkedObjects(MObject * const mObj, Model *model, QWidget *parent)
+{
+    QComboBox *combobox = new QComboBox(parent);
+    ushort index = 0;
+    MObject *currentValue = getValue(mObj);
+    if (model)
+    {
+        if (!isMandatory() || !currentValue)
+        {
+            MObject *dummyElem = nullptr;
+            combobox->addItem("", QVariant::fromValue(static_cast<void*>(dummyElem)));
+            ++index;
+        }
+        int currentValueIndex = 0;
+        QList<MObject*> possibleLinkedObjects = model->getModelObjectsOrderedByNames(_linkedModelObjectType, true);
+        if (_defaultLinkedObject && !possibleLinkedObjects.contains(_defaultLinkedObject))
+            possibleLinkedObjects.prepend(_defaultLinkedObject);
+
+        for (MObject *e : possibleLinkedObjects)
+        {
+            combobox->addItem(e->getIcon(), e->getName(), e->toVariant());
+
+            if (e == currentValue)
+                currentValueIndex = index;
+            ++index;
+        }
+        combobox->setCurrentIndex(currentValueIndex);
+    }
+    if (mObj && mObj->isReadOnly())
+        combobox->setEnabled(false);
+    return combobox;
+}
 #endif
+

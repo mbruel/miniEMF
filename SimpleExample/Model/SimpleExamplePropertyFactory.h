@@ -5,9 +5,9 @@
 #include "Utils/Singleton.h"
 
 
-class PropertyFactoryMiniEMF : public PropertyFactory, public Singleton<PropertyFactoryMiniEMF>
+class SimpleExamplePropertyFactory : public PropertyFactory, public Singleton<SimpleExamplePropertyFactory>
 {
-    friend class Singleton<PropertyFactoryMiniEMF>;
+    friend class Singleton<SimpleExamplePropertyFactory>; // to access constructor
 
 public:
     void initStatics() override; // Ecore specific
@@ -17,11 +17,11 @@ protected:
     void linkAllReverseProperties() override;
     void defineEnumPropertyValues() override;
     void defineEcoreContainmentProperties() override;
-    void defineElementTypeContainerProperties() override;
+    void defineModelObjectTypeContainerProperties() override;
 
 private:
-    PropertyFactoryMiniEMF() = default;
-    ~PropertyFactoryMiniEMF() = default;
+    SimpleExamplePropertyFactory() = default;
+    ~SimpleExamplePropertyFactory() = default;
 };
 
 

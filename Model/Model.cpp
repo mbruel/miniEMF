@@ -19,80 +19,85 @@
 //
 //========================================================================
 
-#include "Element.h"
+#include "MObject.h"
 #include "Model.h"
 #include <QtDebug>
-#include "Model/ElementTypeFactory.h"
+#include "Model/MObjectTypeFactory.h"
 
 
-Model::Model(ElementTypeFactory *typeFactory,
+Model::Model(MObjectTypeFactory *typeFactory,
              const QString &dataModel, const QString &version, const QString &desc,
-             const QString &user, const QString &date, bool ownElements):
-    _typeFactory(typeFactory), _elementTypeMap(), _nextElemId(), _ownElements(ownElements),
-    _toolName(dataModel), _exportVersion(version), _exportDescription(desc), _user(user), _date(date)
+             uint id, const QString &date, bool ownElements):
+    _typeFactory(typeFactory), _mObjectTypeMap(), _nextElemId(), _ownModelObjects(ownElements),
+    _toolName(dataModel), _exportVersion(version), _exportDescription(desc), _id(id), _date(date)
 {
 }
 
 Model::Model(Model &&other):
     _typeFactory(other._typeFactory),
-    _elementTypeMap(std::move(other._elementTypeMap)),
+    _mObjectTypeMap(std::move(other._mObjectTypeMap)),
     _nextElemId(std::move(other._nextElemId)),
-    _ownElements(other._ownElements),
+    _ownModelObjects(other._ownModelObjects),
     _toolName(other._toolName), _exportVersion(other._exportVersion),
     _exportDescription(other._exportDescription),
-    _user(other._user), _date(other._date)
+    _id(other._id), _date(other._date)
 {
-    other._ownElements = false;
+    other._ownModelObjects = false;
 }
 
 //Model &Model::operator=(Model &&other)
 //{
 //    _typeFactory       = other._typeFactory;
-//    _elementTypeMap    = std::move(other._elementTypeMap);
+//    _mObjectTypeMap    = std::move(other._mObjectTypeMap);
 //    _nextElemId        = std::move(other._nextElemId);
 //    _toolName          = other._toolName;
 //    _exportVersion     = other._exportVersion;
 //    _exportDescription = other._exportDescription;
-//    _user              = other._user;
+//    _id              = other._id;
 //    _date              = other._date;
 //    return this;
 //}
 
 Model::~Model()
 {
+    qDebug() << "[MB_TRACE][Model::~Model] deleting model... _ownModelObjects: " << _ownModelObjects;
+#ifdef __CASCADE_DELETION__
+    clearModel(false);
+#else
     clearModel();
+#endif
 }
 
-void Model::shallowCopySubsetOfMainModel(Model *mainModel, const QSet<Element *> &elementsToCopy)
+void Model::shallowCopySubsetOfMainModel(const QSet<MObject *> &elementsToCopy, const QSet<MObjectType *> &rootTypesToNotTake)
 {
-    _ownElements = false;
-    for (Element *elem : elementsToCopy)
-        elem->exportWithLinksAsNewModelSharingSameElements(mainModel, this);
+    _ownModelObjects = false;
+    for (MObject *mObj : elementsToCopy)
+        mObj->exportWithLinksAsNewModelSharingSameModelObjects(this, rootTypesToNotTake);
 }
 
 
 
-Model *Model::cloneSubset(const QSet<Element *> &mainElements)
+Model *Model::cloneSubset(const QSet<MObject *> &mainElements)
 {
     // First create the subModel without new Elements
     Model subModel(_typeFactory, _toolName, _exportVersion,
-                   _exportDescription, _user, _date);
-    subModel.shallowCopySubsetOfMainModel(this, mainElements);
+                   _exportDescription, _id, _date);
+    subModel.shallowCopySubsetOfMainModel(mainElements);
 
     // Then we clone it
     return clone(&subModel);
 }
 #include <QRegularExpression>
-QString Model::getCopyName(Element *elemToCopy) const
+QString Model::getCopyName(MObject *mObjToCopy) const
 {
-    QString srcName = elemToCopy->getName();
-    ushort copyNumber = 0;
+    QString srcName = mObjToCopy->getName();
+    int copyNumber = 0;
     const QRegularExpression copyReg(QString("^%1_copy(_(\\d+))?").arg(srcName));
-    QMap<QString, Element*> *sameTypeElements = _elementTypeMap.value(elemToCopy->getElementType(), nullptr);
-    // we have at least one element, the one to copy so the Map exists
-    for (auto it = sameTypeElements->cbegin() ; it != sameTypeElements->cend() ; ++it)
+    QMap<QString, MObject*> *sameTypeElements = _mObjectTypeMap.value(mObjToCopy->getModelObjectType(), nullptr);
+    // we have at least one mObject, the one to copy so the Map exists
+    for (auto it = sameTypeElements->cbegin(), itEnd = sameTypeElements->cend(); it != itEnd ; ++it)
     {
-        Element *elemSameType = it.value();
+        MObject *elemSameType = it.value();
         QRegularExpressionMatch match = copyReg.match(elemSameType->getName());
         if (match.hasMatch())
         {
@@ -107,7 +112,7 @@ QString Model::getCopyName(Element *elemToCopy) const
         }
     }
 
-    QString copyName = elemToCopy->getName();
+    QString copyName = mObjToCopy->getName();
     copyName += "_copy";
     if (copyNumber)
         copyName += QString("_%1").arg(++copyNumber);
@@ -119,37 +124,37 @@ QString Model::getCopyName(Element *elemToCopy) const
 Model *Model::clone(Model *model)
 {
     Model *clone = new Model(model->_typeFactory, model->_toolName, model->_exportVersion,
-                             model->_exportDescription, model->_user, model->_date);
+                             model->_exportDescription, model->_id, model->_date);
 
-    // clone all the elements without the property map
-    auto itStart = model->_elementTypeMap.cbegin(), itEnd = model->_elementTypeMap.cend();
+    // clone all the mObjects without the property map
+    auto itStart = model->_mObjectTypeMap.cbegin(), itEnd = model->_mObjectTypeMap.cend();
     for (auto itType = itStart ; itType != itEnd ; ++itType)
     {
-        ElementType             *type       = itType.key();
-        QMap<QString, Element*> *elements   = itType.value();
-        if (!elements->isEmpty())
+        MObjectType             *type       = itType.key();
+        QMap<QString, MObject*> *mObjects   = itType.value();
+        if (!mObjects->isEmpty())
         {
-            QMap<QString, Element*> *newElements = new QMap<QString, Element*>();
-            for (auto itElem = elements->cbegin() ; itElem != elements->cend() ; ++itElem)
-               newElements->insert(itElem.key(), itElem.value()->shallowCopy());
-            clone->_elementTypeMap[type] = newElements;
+            QMap<QString, MObject*> *newModelObjects = new QMap<QString, MObject*>();
+            for (auto itElem = mObjects->cbegin(), itElemEnd =  mObjects->cend(); itElem != itElemEnd ; ++itElem)
+               newModelObjects->insert(itElem.key(), itElem.value()->shallowCopy());
+            clone->_mObjectTypeMap[type] = newModelObjects;
         }
     }
 
     // Now update the property map
-    for (ElementType *type : model->_elementTypeMap.keys())
+    for (MObjectType *type : model->_mObjectTypeMap.keys())
     {
-        QMap<QString, Element*> *srcElements = model->_elementTypeMap.value(type),
-                *newElements = clone->_elementTypeMap.value(type);
+        QMap<QString, MObject*> *srcElements = model->_mObjectTypeMap.value(type),
+                *newModelObjects = clone->_mObjectTypeMap.value(type);
         if (!srcElements->isEmpty())
         {
             for (const QString &elemId : srcElements->keys())
             {
-                Element *srcElem = srcElements->value(elemId),
-                        *newElem = newElements->value(elemId);
+                MObject *srcElem = srcElements->value(elemId),
+                        *newModelObject = newModelObjects->value(elemId);
 
-                // copy all the property of elem into newElem using linked elements from the cloned model
-                newElem->copyPropertiesFromSourceElementWithCloneElements(srcElem, clone);
+                // copy all the property of mObj into newModelObject using linked mObjects from the cloned model
+                newModelObject->copyPropertiesFromSourceElementWithCloneElements(srcElem, clone);
             }
         }
     }
@@ -160,105 +165,89 @@ Model *Model::clone(Model *model)
 
 
 
-QMap<QString, Element*> *Model::_getElementMap(ElementType *elementType)
+QMap<QString, MObject*> *Model::_getModelObjectMap(MObjectType *mObjectType)
 {
-    if (!elementType->isInstanciable())
-        qDebug() << "[ERROR][Model::_getElementMap] should not be called for non Instanciable ElementType " << elementType->getName();
+    if (!mObjectType->isInstanciable())
+        qDebug() << "[ERROR][Model::_getModelObjectMap] should not be called for non Instanciable MObjectType " << mObjectType->getName();
 
-    QMap<QString, Element*> *map = _elementTypeMap.value(elementType, nullptr);
+    QMap<QString, MObject*> *map = _mObjectTypeMap.value(mObjectType, nullptr);
     if (!map){
-        map = new QMap<QString, Element*>();
-        _elementTypeMap.insert(elementType, map);
+        map = new QMap<QString, MObject*>();
+        _mObjectTypeMap.insert(mObjectType, map);
     }
 
     return map;
 }
 
-QList<Element *> Model::_convertAndSortQSetToQList(const QSet<Element *> &elts, Model::SortElementView sortFunction)
+QList<MObject *> Model::_convertAndSortQSetToQList(const QSet<MObject *> &elts, Model::SortElementView sortFunction)
 {
-    QList<Element*> eltList(elts.toList());
+    QList<MObject*> eltList(elts.toList());
     std::sort(eltList.begin(),eltList.end(), *sortFunction);
     return eltList;
 }
 
-void Model::addNewElementWithIdCreation(Element *element)
+void Model::add(MObjectType *mObjectType, MObject *mObject, bool updateElemState)
 {
-    if (element)
+    if (mObject)
     {
-        ElementType *elementType = element->getElementType();
+        QMap<QString, MObject*> *mObjectMap = _getModelObjectMap(mObjectType);
+        (*mObjectMap)[mObject->getId()] =  mObject;
 
-        uint nextId = _nextElemId.value(elementType, 0);
-        _nextElemId[elementType] = ++nextId;
-        element->setId(QString("%1_%2_%3").arg(elementType->getId()).arg(_user).arg(nextId));
-
-        QMap<QString, Element*> *elementMap = _getElementMap(elementType);
-        (*elementMap)[element->getId()] =  element;
-        element->_state = Element::STATE::ADDED_IN_MODEL;
-    }
-
-}
-
-void Model::add(ElementType *elementType, Element *element, bool updateElemState)
-{
-    if (element)
-    {
-        QMap<QString, Element*> *elementMap = _getElementMap(elementType);
-        (*elementMap)[element->getId()] =  element;
-
-        if (element->_state == Element::STATE::REMOVED_FROM_MODEL)
-            element->makeVisibleForLinkedElements();
+        if (mObject->_state == MObject::STATE::REMOVED_FROM_MODEL)
+            mObject->makeVisibleForLinkedModelObjects();
 
         if (updateElemState)
-            element->_state = Element::STATE::ADDED_IN_MODEL;
+            mObject->_state = MObject::STATE::ADDED_IN_MODEL;
     }
 }
 
-void Model::add(Element *element)
+void Model::add(MObject *mObject)
 {
-    add(element->getElementType(), element);
+    add(mObject->getModelObjectType(), mObject);
 }
 
-void Model::remove(Element *element)
+void Model::remove(MObject *mObject, bool hideFromOtherObjects)
 {
-    if (element)
+    if (mObject)
     {
-        QMap<QString, Element*> *elementMap = _getElementMap(element->getElementType());
-        QMap<QString, Element*>::iterator it = elementMap->find(element->getId());
-        if (it != elementMap->end())
-        {
-            elementMap->erase(it);
+        QMap<QString, MObject*> *mObjectMap = _getModelObjectMap(mObject->getModelObjectType());
+        QMap<QString, MObject*>::iterator it = mObjectMap->find(mObject->getId());
+        if (it != mObjectMap->end())
+            mObjectMap->erase(it);
 
-            element->_state = Element::STATE::REMOVED_FROM_MODEL;
-            element->hideFromLinkedElements();
-        }
+        mObject->_state = MObject::STATE::REMOVED_FROM_MODEL;
+        if (hideFromOtherObjects)
+            mObject->hideFromLinkedModelObjects();
     }
 }
 
-bool Model::contains(Element *element)
+bool Model::contains(MObject *mObject)
 {
-    QMap<QString, Element*> *map = _elementTypeMap.value(element->getElementType(), nullptr);
+    QMap<QString, MObject*> *map = _mObjectTypeMap.value(mObject->getModelObjectType(), nullptr);
     if (map)
     {
-        if (map->find(element->getId()) != map->cend())
+        if (map->find(mObject->getId()) != map->cend())
             return true;
     }
     return false;
 }
 
-Element *Model::getElementById(ElementType* elementType, QString id)
+
+
+MObject *Model::getModelObjectById(MObjectType* mObjectType, const QString &id)
 {
-    QSet<ElementType*> eltTypes(elementType->getInstanciableElementTypes());
+    QSet<MObjectType*> eltTypes(mObjectType->getInstanciableModelObjectTypes());
     if (eltTypes.isEmpty())
     {
-        qDebug() << "[ERROR][Model::getElements] ElementType '"
-                 << elementType->getName() << "' is not instanciable and has no derived class that is";
+        qDebug() << "[ERROR][Model::getModelObjects] MObjectType '"
+                 << mObjectType->getName() << "' is not instanciable and has no derived class that is";
     }
 
-    for (ElementType * const eltType : eltTypes){
-        QMap<QString, Element*> *elementMap = _elementTypeMap.value(eltType, nullptr);
-        if (elementMap){
-            auto it = elementMap->constFind(id);
-            if ( it != elementMap->constEnd())
+    for (MObjectType * const eltType : eltTypes){
+        QMap<QString, MObject*> *mObjectMap = _mObjectTypeMap.value(eltType, nullptr);
+        if (mObjectMap){
+            auto it = mObjectMap->constFind(id);
+            if ( it != mObjectMap->constEnd())
                 return it.value();
         }
     }
@@ -266,32 +255,56 @@ Element *Model::getElementById(ElementType* elementType, QString id)
     return nullptr;
 }
 
-QList<Element *> Model::getElementsOrderedByNames(ElementType *elementType, QSet<Element *> *filterElements)
+MObject *Model::getModelObjectByName(MObjectType *mObjectType, const QString &name)
+{
+    QSet<MObjectType*> eltTypes(mObjectType->getInstanciableModelObjectTypes());
+    if (eltTypes.isEmpty())
+    {
+        qDebug() << "[ERROR][Model::getModelObjects] MObjectType '"
+                 << mObjectType->getName() << "' is not instanciable and has no derived class that is";
+    }
+
+    for (MObjectType * const eltType : eltTypes){
+        QMap<QString, MObject*> *mObjectMap = _mObjectTypeMap.value(eltType, nullptr);
+        if (mObjectMap)
+        {
+            for (auto it = mObjectMap->cbegin() , itEnd = mObjectMap->cend(); it != itEnd ; ++it)
+            {
+                if (it.value()->getName() == name)
+                    return it.value();
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+QList<MObject *> Model::getModelObjectsOrderedByNames(MObjectType *mObjectType, bool useDerivedType, QSet<MObject *> *filterModelObjects)
 {
     return _convertAndSortQSetToQList(
-                getElements(elementType, filterElements),
-                &Element::elementNameInsensitiveLessThan);
+                getModelObjects(mObjectType, useDerivedType, filterModelObjects),
+                &MObject::elementNameInsensitiveLessThan);
 }
 
-QList<ElementType *> Model::getRootElementTypes()
+QList<MObjectType *> Model::getRootModelObjectTypes()
 {
-    return _typeFactory->getRootElementTypes();
+    return _typeFactory->getRootModelObjectTypes();
 }
 
-ElementType *Model::getElementTypeByName(const QString &name)
+MObjectType *Model::getModelObjectTypeByName(const QString &name)
 {
-    return _typeFactory->getElementTypeByName(name);
+    return _typeFactory->getModelObjectTypeByName(name);
 }
 
-void Model::dumpElementTypeMap()
+void Model::dumpModelObjectTypeMap(const QString &msg)
 {
-    qDebug() << "[Model::dumpElementTypeMap] Dumping Model:";
-    for (auto it = _elementTypeMap.begin(); it != _elementTypeMap.end(); ++it)
+    qDebug() << "[Model::dumpModelObjectTypeMap] Dumping Model: "  << msg;
+    for (auto it = _mObjectTypeMap.begin(), itEnd = _mObjectTypeMap.end(); it != itEnd; ++it)
     {
-        ElementType             *elementType = it.key();
-        QMap<QString, Element*> *elementMap  = it.value();
-        qDebug() << "\tNb " << elementType->getLabel() << " : " << elementMap->size()
-                 << " (addr: " << elementType << ")";
+        MObjectType             *mObjectType = it.key();
+        QMap<QString, MObject*> *mObjectMap  = it.value();
+        qDebug() << "\tNb " << mObjectType->getLabel() << " : " << mObjectMap->size()
+                 << " (addr: " << mObjectType << ")";
     }
 }
 
@@ -301,13 +314,13 @@ bool Model::operator ==(const Model &m)
     if (m._typeFactory != _typeFactory)
         return false;
 
-    QList<ElementType*> eltTypes = _elementTypeMap.keys();
-    if (m._elementTypeMap.keys() != eltTypes)
+    QList<MObjectType*> eltTypes = _mObjectTypeMap.keys();
+    if (m._mObjectTypeMap.keys() != eltTypes)
         return false;
 
-    for (ElementType *type : eltTypes)
+    for (MObjectType *type : eltTypes)
     {
-        if (m._elementTypeMap.value(type)->keys() != _elementTypeMap.value(type)->keys())
+        if (m._mObjectTypeMap.value(type)->keys() != _mObjectTypeMap.value(type)->keys())
             return false;
     }
 
@@ -315,51 +328,101 @@ bool Model::operator ==(const Model &m)
 }
 
 
-
-
-void Model::clearModel()
+void Model::resetTypesNumberOfModelObjects()
 {
-    if (_ownElements)
+    for (auto itType = _mObjectTypeMap.cbegin(), itTypeEnd = _mObjectTypeMap.cend(); itType != itTypeEnd; ++itType)
+        itType.key()->_nbModelObjects = 0;
+}
+
+void Model::clearModel(bool deleteModelObjects)
+{
+    if (_ownModelObjects)
     {
-        auto itType = _elementTypeMap.begin();
-        while (itType != _elementTypeMap.end()){
-            QMap<QString, Element*> *elementMap = itType.value();
-            qDeleteAll(*elementMap);
-            delete elementMap;
-            itType = _elementTypeMap.erase(itType);
+        auto itType = _mObjectTypeMap.begin(), itTypeEnd = _mObjectTypeMap.end();
+        while (itType != itTypeEnd){
+            QMap<QString, MObject*> *mObjectMap = itType.value();
+            if (deleteModelObjects)
+                qDeleteAll(*mObjectMap);
+            delete mObjectMap;
+            itType = _mObjectTypeMap.erase(itType);
+        }
+    }
+}
+
+void Model::validate(QStringList &compilationErrors, const QSet<MObjectType *> &typesToExclude)
+{
+    for (auto itType = _mObjectTypeMap.cbegin(), itTypeEnd = _mObjectTypeMap.cend() ; itType != itTypeEnd ; ++itType)
+    {
+        QMap<QString, MObject*> *modelObjects = itType.value();
+        for (auto itObj = modelObjects->begin(), itObjEnd = modelObjects->end() ; itObj != itObjEnd ; ++itObj)
+        {
+            MObject *modelObj = itObj.value();
+            modelObj->validateLinkProperties(compilationErrors);
+            if (!typesToExclude.contains(itType.key()))
+                modelObj->validateBusinessRules(compilationErrors);
+        }
+    }
+}
+
+void Model::validateModel(QStringList &compilationErrors)
+{
+    for (auto itType = _mObjectTypeMap.cbegin(), itTypeEnd = _mObjectTypeMap.cend() ; itType != itTypeEnd ; ++itType)
+    {
+        QMap<QString, MObject*> *modelObjects = itType.value();
+        for (auto itObj = modelObjects->begin(), itObjEnd = modelObjects->end() ; itObj != itObjEnd ; ++itObj)
+            itObj.value()->validateLinkProperties(compilationErrors);
+    }
+}
+
+void Model::validateBusinessRules(QStringList &compilationErrors, const QSet<MObjectType *> &typesToExclude)
+{
+    for (auto itType = _mObjectTypeMap.cbegin(), itTypeEnd = _mObjectTypeMap.cend() ; itType != itTypeEnd ; ++itType)
+    {
+        QMap<QString, MObject*> *modelObjects = itType.value();
+        for (auto itObj = modelObjects->begin(), itObjEnd = modelObjects->end() ; itObj != itObjEnd ; ++itObj)
+        {
+            if (!typesToExclude.contains(itType.key()))
+                itObj.value()->validateBusinessRules(compilationErrors);
         }
     }
 }
 
 
-QSet<Element*> Model::getElements(ElementType* elementType, QSet<Element*>* filterElements)
+QSet<MObject*> Model::getModelObjects(MObjectType* mObjectType, bool useDerivedType, QSet<MObject*>* filterModelObjects)
 {
-    QSet<ElementType*> eltTypes(elementType->getInstanciableElementTypes());
-    if (eltTypes.isEmpty())
+    QSet<MObjectType*> eltTypes = {mObjectType};
+
+    if (useDerivedType)
     {
-        qDebug() << "[ERROR][Model::getElements] ElementType '"
-                 << elementType->getName() << "' is not instanciable and has no derived class that is";
+        eltTypes = mObjectType->getInstanciableModelObjectTypes();
+        if (eltTypes.isEmpty())
+            qDebug() << "[ERROR][Model::getModelObjects] MObjectType '"
+                     << mObjectType->getName() << "' is not instanciable and has no derived class that is";
     }
 
-    QSet<Element*> elements;
-    for (ElementType *eltType : eltTypes)
+    QSet<MObject*> mObjects;
+    for (MObjectType *eltType : eltTypes)
     {
-        QMap<QString, Element*>* elementMap = _elementTypeMap.value(eltType, nullptr);
-        if (!elementMap)
+        QMap<QString, MObject*>* mObjectMap = _mObjectTypeMap.value(eltType, nullptr);
+#ifdef __MB_TRACE_MODEL__
+        if (!mObjectMap)
         {
-            qDebug() << "[ERROR][Model::getElements] can't find ElementType '"
+            qDebug() << "[ERROR][Model::getModelObjects] can't find MObjectType '"
                      << eltType->getName() << "' in global map elementTypeMap...";
         }
         else
+#else
+        if (mObjectMap)
+#endif
         {
-            auto itEnd = elementMap->end();
-            for (auto it = elementMap->begin(); it != itEnd; ++it)
+            for (auto it = mObjectMap->begin(), itEnd = mObjectMap->end(); it != itEnd; ++it)
             {
-                Element *elem = it.value();
-                if(filterElements == nullptr || !filterElements->contains(elem))
-                    elements.insert(elem);
+                MObject *mObj = it.value();
+                if(filterModelObjects == nullptr || !filterModelObjects->contains(mObj))
+                    mObjects.insert(mObj);
             }
         }
     }
-    return elements;
+    return mObjects;
 }
+

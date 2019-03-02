@@ -21,10 +21,10 @@
 
 #include "PropertyFactory.h"
 
-void PropertyFactory::initElementProperties()
+void PropertyFactory::initModelObjectProperties()
 {
-    Element::PROPERTY_NAME        = new StringProperty("name", "Name", "");
-//    Element::PROPERTY_DESCRIPTION = new StringProperty("description", "Description", "");
+    MObject::PROPERTY_NAME        = new StringProperty("name", "Name", "");
+//    MObject::PROPERTY_DESCRIPTION = new StringProperty("description", "Description", "");
 }
 
 void PropertyFactory::initProperties()
@@ -38,7 +38,7 @@ void PropertyFactory::initProperties()
     // DEFINE VALUES OF ENUM PROPERTIES
     defineEnumPropertyValues();
 
-    defineElementTypeContainerProperties();
+    defineModelObjectTypeContainerProperties();
 }
 
 void PropertyFactory::linkReverseProperties(LinkProperty * const linkProperty, LinkProperty * const reverseLinkProperty)

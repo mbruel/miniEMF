@@ -23,7 +23,7 @@
 #define PROPERTYFACTORY_H
 
 #include "Model/Property.h"
-#include "Model/Element.h"
+#include "Model/MObject.h"
 #include <QMap>
 
 class PropertyFactory
@@ -38,20 +38,20 @@ protected:
     PropertyFactory() = default;
 
     // Fixed methods (independant of the Ecore Model in use)
-    void initElementProperties();
+    void initModelObjectProperties();
     void linkReverseProperties(LinkProperty *const linkProperty, LinkProperty *const reverseLinkProperty);
 
     template< typename TypeAttribute, template <typename> class AttributeProperty>
         AttributeProperty<TypeAttribute> *_create(QMap<QString, Property*> *propertyMap, const QString &name, const char *label, const TypeAttribute & defaultValue = TypeAttribute());
     template< typename PropertyType>     PropertyType     *_create(QMap<QString, Property*> *propertyMap, const QString &name, const char *label);
-    template< typename LinkPropertyType> LinkPropertyType *_create(QMap<QString, Property*> *propertyMap, ElementType *const eltType, ElementType *const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable = true);
+    template< typename LinkPropertyType> LinkPropertyType *_create(QMap<QString, Property*> *propertyMap, MObjectType *const eltType, MObjectType *const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable = true);
 
 
     // Ecore specific methods (generated)
     virtual void linkAllReverseProperties() = 0;
     virtual void defineEnumPropertyValues() = 0;
     virtual void defineEcoreContainmentProperties() = 0;
-    virtual void defineElementTypeContainerProperties() = 0;
+    virtual void defineModelObjectTypeContainerProperties() = 0;
 };
 
 
@@ -59,21 +59,21 @@ template< typename TypeAttribute, template< typename > class AttributeProperty>
 AttributeProperty<TypeAttribute> *PropertyFactory::_create(QMap<QString, Property *> *propertyMap, const QString &name, const char *label, const TypeAttribute &defaultValue)
 {
     AttributeProperty<TypeAttribute> *property = new AttributeProperty<TypeAttribute>(name, label, defaultValue);
-    Element::addPropertyToMap(propertyMap, property);
+    MObject::addPropertyToMap(propertyMap, property);
     return property;
 }
 
 template< typename PropertyType> PropertyType *PropertyFactory::_create(QMap<QString, Property *> *propertyMap, const QString &name, const char *label)
 {
     PropertyType* property = new PropertyType(name, label);
-    Element::addPropertyToMap(propertyMap, property);
+    MObject::addPropertyToMap(propertyMap, property);
     return property;
 }
 
-template< typename LinkPropertyType> LinkPropertyType *PropertyFactory::_create(QMap<QString, Property *> *propertyMap, ElementType * const eltType, ElementType * const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable)
+template< typename LinkPropertyType> LinkPropertyType *PropertyFactory::_create(QMap<QString, Property *> *propertyMap, MObjectType * const eltType, MObjectType * const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable)
 {
     LinkPropertyType *property = new LinkPropertyType(eltType, linkedEltType, name, label, isMandatory, isSerializable);
-    Element::addPropertyToMap(propertyMap, property);
+    MObject::addPropertyToMap(propertyMap, property);
     return property;
 }
 

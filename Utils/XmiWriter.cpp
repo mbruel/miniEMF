@@ -20,8 +20,8 @@
 //========================================================================
 
 #include "XmiWriter.h"
-#include "Model/Element.h"
-
+#include "Model/MObject.h"
+#include "Model/Property.h"
 #include <QXmlStreamWriter>
 #include <QFile>
 
@@ -35,14 +35,23 @@ const QMap<XmiWriter::XMI_TYPE, QString> XmiWriter::sXmiStartTags = {
 
 
 XmiWriter::XmiWriter(Model *model, QFile *file)
-    : _model(model), _xmlStreamWriter(new QXmlStreamWriter(file))
+    : _model(model),
+      _xmlStreamWriter(new QXmlStreamWriter(file)),
+      _ownStreamWriter(true)
 {
     init();
 }
 
+XmiWriter::XmiWriter(Model *model, QXmlStreamWriter *xmlWriter)
+    : _model(model),
+      _xmlStreamWriter(xmlWriter),
+      _ownStreamWriter(false)
+{}
+
 XmiWriter::~XmiWriter()
 {
-    delete _xmlStreamWriter;
+    if (_ownStreamWriter)
+        delete _xmlStreamWriter;
 }
 
 void XmiWriter::init()
@@ -55,7 +64,7 @@ void XmiWriter::writeStartTag(const QString &applicationName, XMI_TYPE xmiType)
     // Append tag XML
     _xmlStreamWriter->writeStartDocument();
 
-    // Create tag PamDataModel:Model
+    // Create tag Cosi7:Model
     QString dataModel = _model->getToolName();
     _xmlStreamWriter->writeStartElement(dataModel+":"+sXmiStartTags.value(xmiType));
     _xmlStreamWriter->writeAttribute("xmlns:"+dataModel, "http://"+dataModel);
@@ -65,7 +74,7 @@ void XmiWriter::writeStartTag(const QString &applicationName, XMI_TYPE xmiType)
     _xmlStreamWriter->writeAttribute("ExportVersion", _model->getExportVersion());
     _xmlStreamWriter->writeAttribute("Date", QDateTime::currentDateTime().toString("yyyy/MM/dd hh:mm:ss"));
     _xmlStreamWriter->writeAttribute("ExportDescription", _model->getExportDescription());
-    _xmlStreamWriter->writeAttribute("UserId", _model->getUser());
+    _xmlStreamWriter->writeAttribute("ModelId", QString::number(_model->getId()));
 }
 
 void XmiWriter::writeEndDocument()
@@ -73,11 +82,11 @@ void XmiWriter::writeEndDocument()
     _xmlStreamWriter->writeEndDocument();
 }
 
-void XmiWriter::write(ElementType *elementType)
+void XmiWriter::write(MObjectType *mObjectType)
 {
-    QMap<QString, Element *> *elements = _model->_getElementMap(elementType);
-    QString tagName(elementType->getName());
-    for (auto it = elements->cbegin() ; it != elements->cend() ; ++it)
+    QMap<QString, MObject *> *mObjects = _model->_getModelObjectMap(mObjectType);
+    QString tagName(mObjectType->getName());
+    for (auto it = mObjects->cbegin() , itEnd = mObjects->cend(); it != itEnd ; ++it)
         it.value()->serialize(this, tagName);
 }
 
@@ -102,22 +111,56 @@ void XmiWriter::addAttribute(const QString &name, bool value)
     if (!name.isEmpty())
     {
         if (value)
-            addAttribute(name, "true");
+            addAttribute(name, QString("true"));
         else
-            addAttribute(name, "false");
+            addAttribute(name, QString("false"));
     }
 }
 
 void XmiWriter::addAttribute(const QString &name, int value)
 {
     if (!name.isEmpty())
-        addAttribute(name, QString::number(value));
-}
+    {
+        QString valStr;
+        if (value == Property::INT_INFINITE_NEG)
+            valStr = "-∞";
+        else if (value == Property::INT_INFINITE_POS)
+            valStr = "+∞";
+        else
+            valStr = QString::number(value);
+
+        addAttribute(name, valStr);
+    }}
 
 void XmiWriter::addAttribute(const QString &name, double value)
 {
     if (!name.isEmpty())
-        addAttribute(name, QString::number(value));
+    {
+        QString valStr;
+        if (value == Property::DBL_INFINITE_NEG)
+            valStr = "-∞";
+        else if (value == Property::DBL_INFINITE_POS)
+            valStr = "+∞";
+        else
+            valStr = QString("%1").arg(value, 0, 'g', 13);
+
+        addAttribute(name, valStr);
+    }}
+
+void XmiWriter::addAttribute(const QString &name, float value)
+{
+    if (!name.isEmpty())
+    {
+        QString valStr;
+        if (value == Property::FLT_INFINITE_NEG)
+            valStr = "-∞";
+        else if (value == Property::FLT_INFINITE_POS)
+            valStr = "+∞";
+        else
+            valStr = QString("%1").arg(value, 0, 'g', 7);
+
+        addAttribute(name, valStr);
+    }
 }
 
 void XmiWriter::addAttribute(const QString &name, const QDateTime &value)
@@ -125,24 +168,24 @@ void XmiWriter::addAttribute(const QString &name, const QDateTime &value)
     addAttribute(name, value.toString("yyyy/MM/dd hh:mm:ss"));
 }
 
-void XmiWriter::addAttribute(const QString &name, Element *element)
+void XmiWriter::addAttribute(const QString &name, MObject *mObject)
 {
-    if (element && !name.isEmpty())
-        addAttribute(name, element->getId());
+    if (mObject && !name.isEmpty())
+        addAttribute(name, mObject->getId());
 }
 
 
-void XmiWriter::addAttribute(const QString &name, const QList<Element *> &elements)
+void XmiWriter::addAttribute(const QString &name, const QList<MObject *> &mObjects)
 {
-    if ( !(elements.isEmpty() || name.isEmpty()) )
+    if ( !(mObjects.isEmpty() || name.isEmpty()) )
     {
         QString value;
         ushort nb;
-        for (Element *elem : elements)
+        for (MObject *mObj : mObjects)
         {
             if (nb++ != 0)
                 value += " ";
-            value += elem->getId();
+            value += mObj->getId();
         }
         addAttribute(name, value);
     }

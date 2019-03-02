@@ -27,87 +27,92 @@
 #include <QSet>
 
 
-class Element;
-class ElementType;
-class ElementTypeFactory;
+class MObject;
+class MObjectType;
+class MObjectTypeFactory;
 class PropertyFactory;
 
 class Model
 {
-    friend class XmiWriter; // to access _typeFactory
+    friend class XmiWriter;  // to access _typeFactory
     friend class XMIService; // for exports
 
 private:
-    ElementTypeFactory *_typeFactory;
-    QMap<ElementType*, QMap<QString, Element*>* > _elementTypeMap;
-    QMap<ElementType*, uint> _nextElemId;
+    MObjectTypeFactory *_typeFactory;
+    QMap<MObjectType*, QMap<QString, MObject*>* > _mObjectTypeMap;
+    QMap<MObjectType*, uint> _nextElemId;
 
-    bool          _ownElements; //!< set to false for subModels, no destuction of the ELements in destructor
+    bool          _ownModelObjects; //!< set to false for subModels, no destuction of the ELements in destructor
 
     const QString _toolName;
     const QString _exportVersion;
     const QString _exportDescription;
-    const QString _user;
+          uint    _id;
     const QString _date;
 
 
 public:
-    Model(ElementTypeFactory *typeFactory, const QString &dataModel,
-          const QString &version, const QString &desc, const QString &user,
+    Model(MObjectTypeFactory *typeFactory, const QString &dataModel,
+          const QString &version, const QString &desc, uint id,
           const QString &date, bool ownElements = true);
 
-    // Moveable from but not copyable (so we can use Element::exportAsModel() )
+    // Moveable from but not copyable (so we can use MObject::exportAsModel() )
     Model(Model &&other);
     Model(const Model &other)             = delete;
     Model & operator=(Model &&other)      = delete;
     Model & operator=(const Model &other) = delete;
 
     ~Model();
-    void shallowCopySubsetOfMainModel(Model *mainModel, const QSet<Element*> &elementsToCopy);
-    Model *cloneSubset(const QSet<Element*> &mainElements);
-    QString getCopyName(Element *elemToCopy) const;
+    void shallowCopySubsetOfMainModel(const QSet<MObject*> &elementsToCopy, const QSet<MObjectType*> &rootTypesToNotTake = QSet<MObjectType*>());
+    Model *cloneSubset(const QSet<MObject*> &mainElements);
+    QString getCopyName(MObject *mObjToCopy) const;
 
     static Model *clone(Model *model);
 
-    void addNewElementWithIdCreation(Element *element);
-    void add(ElementType *elementType, Element *element, bool updateElemState = true);
-    void add(Element *element);
-    void remove(Element *element);
+    void add(MObjectType *mObjectType, MObject *mObject, bool updateElemState = true);
+    void add(MObject *mObject);
+    void remove(MObject *mObject, bool hideFromOtherObjects = true);
 
-    bool contains(Element *element);
+    bool contains(MObject *mObject);
 
-    void clearModel();
+    void resetTypesNumberOfModelObjects();
+    void clearModel(bool deleteModelObjects = true);
 
-    QSet<Element *> getElements(ElementType *elementType, QSet<Element *> *filterElements = nullptr);
-    Element*        getElementById(ElementType *elementType, QString id);
+    void validate(QStringList &compilationErrors, const QSet<MObjectType*> &typesToExclude = QSet<MObjectType*>());
+    void validateModel(QStringList &compilationErrors);
+    void validateBusinessRules(QStringList &compilationErrors, const QSet<MObjectType*> &typesToExclude = QSet<MObjectType*>());
 
-    QList<Element *> getElementsOrderedByNames(ElementType *elementType, QSet<Element *> *filterElements = nullptr);
+    QSet<MObject *> getModelObjects(MObjectType *mObjectType, bool useDerivedType = false, QSet<MObject *> *filterModelObjects = nullptr);
+    MObject        *getModelObjectById(MObjectType *mObjectType, const QString &id);
+    MObject        *getModelObjectByName(MObjectType *mObjectType, const QString &name);
 
-    QList<ElementType*> getRootElementTypes();
-    ElementType *getElementTypeByName(const QString &name);
+    QList<MObject *> getModelObjectsOrderedByNames(MObjectType *mObjectType, bool useDerivedType = false, QSet<MObject *> *filterModelObjects = nullptr);
 
-    void dumpElementTypeMap();
+    QList<MObjectType*> getRootModelObjectTypes();
+    MObjectType *getModelObjectTypeByName(const QString &name);
+
+    void dumpModelObjectTypeMap(const QString &msg = "");
 
     inline QString getDate() const;
     inline QString getExportDescription() const;
     inline QString getExportVersion() const;
     inline QString getToolName() const;
-    inline QString getUser() const;
+    inline uint    getId() const;
 
 
-    bool operator ==(const Model &m); //!< We check that the ids of the elements match (not the object themselves as they will be different)
+    bool operator ==(const Model &m); //!< We check that the ids of the mObjects match (not the object themselves as they will be different)
 
 private:
-    QMap<QString, Element*> *_getElementMap(ElementType* elementType);
+    QMap<QString, MObject*> *_getModelObjectMap(MObjectType* mObjectType);
 
-    typedef bool (*SortElementView)(Element*, Element*);
-    static QList<Element *> _convertAndSortQSetToQList(const QSet<Element*> &elts, SortElementView sortFunction);
+    typedef bool (*SortElementView)(MObject*, MObject*);
+    static QList<MObject *> _convertAndSortQSetToQList(const QSet<MObject*> &elts, SortElementView sortFunction);
 };
 
 QString Model::getDate() const { return _date; }
 QString Model::getExportDescription() const { return _exportDescription; }
 QString Model::getExportVersion() const { return _exportVersion; }
 QString Model::getToolName() const { return _toolName; }
-QString Model::getUser() const { return _user; }
+uint Model::getId() const { return _id; }
 
 #endif // MODEL_H
