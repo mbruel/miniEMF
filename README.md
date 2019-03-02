@@ -1,21 +1,23 @@
 # miniEMF
 
-The Ecore Model is completely transposed in C++ using the mini EMF framework. Instead of using the standard
-attributes of the Objects we’re using a Property management system that has been implemented. This way an
-Element of the Model, will hold a Map of Properties with their corresponding values.
+The mini EMF framework is a C++ transposition of an Ecore Model.
+Instead of using the standard Class attributes we’re using a Property management system.
+The idea doing this is to automatically update the e-opposites.
+It's implementing the observer pattern.
 
 Here are the main advantages of using this framework:
-    - Updating a reference property of an object automatically update the opposite objects if the property has a
-reverse property (e-opposite).
-    - Every property is can be updated using one single method which makes it easy to use an Undo
-Framework
-    - Loading and Dumping a model in XML is easy (xmi format)
-    - Possibility to do shallow copy or deep copy of a subset of the Model
+- Updating a link property of MObject automatically updates the opposite MObjects if the property has a reverse property (e-opposite).
+- Removing a MObject from the Model will automatically remove it from all the other MObjects that use it
+- Every property is updated using one single method (MObject::updateValue) which makes it easy to use an Undo Framework
+- Loading and Dumping a model in XML is easy (xmi format)
+- Possibility to do shallow copy or deep copy of a subset of the Model
 
-An ElementType class is used as a meta-object in order to keep the Elements sorted by by type of objects but
-also to save the Ecore inheritance of the objects.
 
-Each Ecore class must have its own C++ class inheriting from Element where all the Properties are defined as
-statics.
+## How to use it
+- Create all your business Objects (ex: Person, Meeting...) that derives from MObject
+- Create all their Properties that derives from Property (DoubleProperty, Link11Property, MapLinkProperty...)
+- in a TypeFactory deriving from MObjectTypeFactory, create a MObjectType for each of your business Objects and define their Ecore inheritance.
+- in a PropertyFactory deriving from PropertyFactory, instanciate all the Properties of your objects, linking them with their e-opposites
 
-// TO_FINISH
+
+To continue...
