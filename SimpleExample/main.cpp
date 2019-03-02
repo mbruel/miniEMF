@@ -62,19 +62,17 @@ int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
 
-    // I.1.: First thing to do is to initialize the Statics and the Links between objects
-    initStatics();
-    initMetaModel();
-
-
-    // I.2.: if we wish to use translations
+    // I.1.: if we wish to use translations
     QTranslator translator;
-    QString lang("example_fr");
+    QString lang(":/languages/example_fr");
     bool langOk = translator.load(lang);
     bool langLoaded = app.installTranslator(&translator);
     qDebug () << "Loading " << lang << " return : " << langOk << " , loaded: " << langLoaded;
 
 
+    // I.2.: First thing to do is to initialize the Statics and the Links between objects
+    initStatics();
+    initMetaModel();
     // I.3.: create a Model object
     Model model(SimpleExampleTypeFactory::getInstance(),
                 "miniEmfExample", "v1.0", "Simple Example MiniEMF", 42, "");

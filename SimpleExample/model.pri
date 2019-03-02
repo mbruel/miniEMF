@@ -13,3 +13,6 @@ SOURCES += \
 	$$PWD/Model/SimpleExamplePropertyFactory.cpp \
 	$$PWD/Model/SimpleExampleTypeFactory.cpp
 
+RESOURCES += \
+    $$PWD/resources.qrc
+
