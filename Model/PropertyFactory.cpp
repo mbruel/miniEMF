@@ -29,14 +29,18 @@ void PropertyFactory::initModelObjectProperties()
 
 void PropertyFactory::initProperties()
 {
-    // DEFINE PROPERTIES CORRESPONDING TO A CONTAINER RELATIONSHIP IN ECORE MODEL
+    // define the EcoreContainment properties (Ecore Model)
     defineEcoreContainmentProperties();
 
-    // MAKE LINKS BETWEEN PROPERTIES
+    // make the links between properties (e-opposite)
     linkAllReverseProperties();
 
-    // DEFINE VALUES OF ENUM PROPERTIES
+    // set the key of MapLinkProperties
+    defineMapPropertiesKey();
+
+    // define the Enums
     defineEnumPropertyValues();
+
 
     defineModelObjectTypeContainerProperties();
 }

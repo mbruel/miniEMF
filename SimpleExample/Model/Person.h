@@ -24,8 +24,6 @@ public:
     static MapLinkProperty          *PROPERTY_childs; //!< childs ordered by age
     static MultiMapLinkProperty     *PROPERTY_meetings; //!< ordered by date
 
-    QVariant getPropertyMapKey(Property *mapProperty) override;
-
     // Getters
     int getAge();
     int getSex();
@@ -40,8 +38,10 @@ public:
     void setAge(int value);
     void setSex(const QString &value);
     void setPartner(MObject *value);
-    void setParents(const MObjectList &values);
-    void setChilds(const MObjectList &values);
+    void setParents(MObjectList &values);
+    void setChilds(MObjectList &values);
+    void setParents(MObjectList &&values);
+    void setChilds(MObjectList &&values);
 
 
     // Others

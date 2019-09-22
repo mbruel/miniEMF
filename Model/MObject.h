@@ -30,10 +30,28 @@
 #include <QMap>
 #include <QMultiMap>
 
-
-
 class XmiWriter;
 class Model;
+
+
+class QXmlStreamReader;
+class QXmlStreamWriter;
+class QDomNode;
+struct MObjectLinkings
+{
+public:
+    MObjectLinkings(MObject *const mObject, LinkProperty *const linkProperty, const QString &linkValue_):
+        mObj(mObject), linkProp(linkProperty), linkedObjType(nullptr), linkValue(linkValue_) {}
+
+    MObjectLinkings(MObject *const mObject, LinkProperty *const linkProperty, MObjectType *const linkedObjType, const QString &linkValue_):
+        mObj(mObject), linkProp(linkProperty), linkedObjType(linkedObjType), linkValue(linkValue_) {}
+
+    MObject       *const mObj;
+    LinkProperty  *const linkProp;
+    MObjectType   *const linkedObjType;
+    const QString        linkValue;
+};
+
 
 class MObject
 {
@@ -137,9 +155,10 @@ public:
     virtual QString getDefaultName();
 
     void validateLinkProperties(QStringList &ecoreErrors);
-    virtual bool validateBusinessRules(QStringList &businessErrors, MObject *owner = nullptr);
+    virtual bool validateBusinessRules(QStringList &businessErrors, MObject *owner = nullptr);    
 
 
+    Property *getPropertyFromName(const QString &propertyName) const;
     inline QList<Property*> getPropertyList() const ;
     QSet<LinkProperty*> getLinkProperties();
     QMap<QString, LinkProperty *> getContainmentProperties() const;
@@ -151,7 +170,8 @@ public:
     void makeVisibleForLinkedModelObjects();
 
     inline QVariant getPropertyVariant(Property *property) const;
-    virtual inline MObject *getEcoreContainer();
+    MObject *getEcoreContainer() const;
+    LinkToOneProperty *getEcoreContainerProperty() const;
 
 
     inline bool operator<(MObject & elt);
@@ -164,14 +184,19 @@ public:
     void serialize(XmiWriter *xmiWriter, const QString &tagName, const QString &xmiType = "");
 
 
-    void exportWithLinksAsNewModelSharingSameModelObjects(Model *subModel, const QSet<MObjectType*> &rootTypesToNotTake = QSet<MObjectType*>());//!< use to do some xml exports of the mObject with all the links needed
+    void exportWithLinksAsNewModelSharingSameModelObjects(Model *subModel,
+                                                          const QSet<MObjectType*> &rootTypesToNotTake = QSet<MObjectType*>(),
+                                                          bool onlyContainment = false);//!< use to do some xml exports of the mObject with all the links needed
 
 
-    virtual QVariant getPropertyMapKey(Property *mapProperty); //!< for non use of that function, we return the name by default
+    QVariant getPropertyMapKey(Property *mapProperty); //!< for non use of that function, we return the name by default
 
 #ifdef __USE_HMI__
     virtual QIcon getIcon();
 #endif
+
+    void xmlExport(QXmlStreamWriter &xmlWriter);
+    void xmlImport(const QDomNode &node, Model *model, QList<MObjectLinkings *> *objectLinks);
 
 protected:
     MObject(QMap<QString, Property*>* classPropertyMap);
@@ -185,8 +210,8 @@ private:
 
     // Those methods are shared with the Property classes
     template<typename TypeAttribute> TypeAttribute getPropertyValue(AttributeProperty<TypeAttribute> *property) const;
-    template<typename TypeAttribute> QList<TypeAttribute> getListPropertyValue(AttributeListProperty<TypeAttribute> *property);
-    template<typename ReturnTypeLinkProperty> ReturnTypeLinkProperty *getLinkPropertyValue(Property *property);
+    template<typename TypeAttribute> QList<TypeAttribute> getListPropertyValue(AttributeListProperty<TypeAttribute> *property) const;
+    template<typename ReturnTypeLinkProperty> ReturnTypeLinkProperty *getLinkPropertyValue(Property *property) const;
 
     void setPropertyValueFromQVariant(Property *property, const QVariant &value);
     void setPropertyValueFromElement(LinkProperty *property, MObject *value);
@@ -204,7 +229,7 @@ Q_DECLARE_METATYPE( MObject* )
 Q_DECLARE_METATYPE( MObjectSet* )
 Q_DECLARE_METATYPE( MObjectList* )
 Q_DECLARE_METATYPE( MObjectMap* )
-Q_DECLARE_METATYPE( MObjectMultiMap* )
+//Q_DECLARE_METATYPE( MObjectMultiMap* )
 
 
 struct ModelObjectUpdate{
@@ -244,7 +269,7 @@ bool MObject::isA(MObjectType *type) const { return getModelObjectType()->isA(ty
 QList<Property *> MObject::getPropertyList() const { return _propertyValueMap.keys(); }
 
 QVariant MObject::getPropertyVariant(Property *property) const { return _propertyValueMap.value(property, QVariant()); }
-MObject *MObject::getEcoreContainer() { return nullptr; }
+
 
 bool MObject::operator<(MObject& elt){ return getId() < elt.getId(); }
 bool MObject::elementNameInsensitiveLessThan(MObject *elt1, MObject *elt2) {return  elt1->getName().toLower() < elt2->getName().toLower();}
@@ -277,9 +302,9 @@ void MObject::setLinkToManyPropertyValue(Property *property, ReturnTypeLinkPrope
 }
 
 template<typename ReturnTypeLinkProperty>
-ReturnTypeLinkProperty *MObject::getLinkPropertyValue(Property *property)
+ReturnTypeLinkProperty *MObject::getLinkPropertyValue(Property *property) const
 {
-    QVariant &variant = _propertyValueMap[property];
+    const QVariant &variant = _propertyValueMap[property];
     return static_cast<ReturnTypeLinkProperty*>(variant.value<void*>());
 }
 
@@ -292,9 +317,9 @@ TypeAttribute MObject::getPropertyValue(AttributeProperty<TypeAttribute> *proper
 }
 
 template<typename TypeAttribute>
-QList<TypeAttribute> MObject::getListPropertyValue(AttributeListProperty<TypeAttribute> *property)
+QList<TypeAttribute> MObject::getListPropertyValue(AttributeListProperty<TypeAttribute> *property) const
 {
-    QVariant &variant = _propertyValueMap[property];
+    const QVariant &variant = _propertyValueMap[property];
     return variant.value<QList<TypeAttribute> >();
 }
 

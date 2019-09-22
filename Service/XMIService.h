@@ -74,22 +74,4 @@ private:
 };
 
 
-class MObjectLinkings
-{
-public:
-    MObjectLinkings(MObject *const mObject, LinkProperty *const linkProperty, const QString &linkValue):
-        _mObject(mObject), _linkProperty(linkProperty), _linkValue(linkValue) {}
-    ~MObjectLinkings(){}
-
-    MObject      *getModelObject()      const { return _mObject; }
-    LinkProperty *getLinkProperty() const { return _linkProperty; }
-    QString       getLinkValue()    const { return _linkValue; }
-
-private:
-    MObject       *const _mObject;
-    LinkProperty  *const _linkProperty;
-    const QString        _linkValue;
-};
-
-
 #endif // XMISERVICE_H

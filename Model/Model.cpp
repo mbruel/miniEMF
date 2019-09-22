@@ -68,16 +68,16 @@ Model::~Model()
 #endif
 }
 
-void Model::shallowCopySubsetOfMainModel(const QSet<MObject *> &elementsToCopy, const QSet<MObjectType *> &rootTypesToNotTake)
+void Model::shallowCopySubsetOfMainModel(const MObjectSet &elementsToCopy, const QSet<MObjectType *> &rootTypesToNotTake, bool onlyContainment)
 {
     _ownModelObjects = false;
     for (MObject *mObj : elementsToCopy)
-        mObj->exportWithLinksAsNewModelSharingSameModelObjects(this, rootTypesToNotTake);
+        mObj->exportWithLinksAsNewModelSharingSameModelObjects(this, rootTypesToNotTake, onlyContainment);
 }
 
 
 
-Model *Model::cloneSubset(const QSet<MObject *> &mainElements)
+Model *Model::cloneSubset(const MObjectSet &mainElements)
 {
     // First create the subModel without new Elements
     Model subModel(_typeFactory, _toolName, _exportVersion,
@@ -131,10 +131,10 @@ Model *Model::clone(Model *model)
     for (auto itType = itStart ; itType != itEnd ; ++itType)
     {
         MObjectType             *type       = itType.key();
-        QMap<QString, MObject*> *mObjects   = itType.value();
+        QMap<ElemId, MObject*> *mObjects   = itType.value();
         if (!mObjects->isEmpty())
         {
-            QMap<QString, MObject*> *newModelObjects = new QMap<QString, MObject*>();
+            QMap<ElemId, MObject*> *newModelObjects = new QMap<ElemId, MObject*>();
             for (auto itElem = mObjects->cbegin(), itElemEnd =  mObjects->cend(); itElem != itElemEnd ; ++itElem)
                newModelObjects->insert(itElem.key(), itElem.value()->shallowCopy());
             clone->_mObjectTypeMap[type] = newModelObjects;
@@ -154,7 +154,11 @@ Model *Model::clone(Model *model)
                         *newModelObject = newModelObjects->value(elemId);
 
                 // copy all the property of mObj into newModelObject using linked mObjects from the cloned model
-                newModelObject->copyPropertiesFromSourceElementWithCloneElements(srcElem, clone);
+                if (newModelObject)
+                    newModelObject->copyPropertiesFromSourceElementWithCloneElements(srcElem, clone);
+                else
+                    qCritical() << "[Model::clone] the object wasn't clone..." << srcElem->getModelObjectTypeName()
+                                << ", id: " << elemId;
             }
         }
     }
@@ -165,23 +169,36 @@ Model *Model::clone(Model *model)
 
 
 
-QMap<QString, MObject*> *Model::_getModelObjectMap(MObjectType *mObjectType)
+QMap<ElemId, MObject *> *Model::_getModelObjectMap(MObjectType *mObjectType)
 {
     if (!mObjectType->isInstanciable())
         qDebug() << "[ERROR][Model::_getModelObjectMap] should not be called for non Instanciable MObjectType " << mObjectType->getName();
 
-    QMap<QString, MObject*> *map = _mObjectTypeMap.value(mObjectType, nullptr);
+    QMap<ElemId, MObject*> *map = _mObjectTypeMap.value(mObjectType, nullptr);
     if (!map){
-        map = new QMap<QString, MObject*>();
+        map = new QMap<ElemId, MObject*>();
         _mObjectTypeMap.insert(mObjectType, map);
     }
 
     return map;
 }
 
-QList<MObject *> Model::_convertAndSortQSetToQList(const QSet<MObject *> &elts, Model::SortElementView sortFunction)
+#include "Model/Property.h"
+void Model::rebuildMapProperty(MapLinkProperty *mapProp)
 {
-    QList<MObject*> eltList(elts.toList());
+    MObjectType *objType = mapProp->getModelObjectType();
+    for (MObject *obj : getModelObjects(objType))
+    {
+        MObjectMap map;
+        for (MObject *propObj : mapProp->getLinkedModelObjects(obj))
+            map.insert(propObj->getPropertyMapKey(mapProp), propObj);
+        mapProp->setValuesFromMap(obj, &map);
+    }
+}
+
+MObjectList Model::_convertAndSortQSetToQList(const MObjectSet &elts, Model::SortElementView sortFunction)
+{
+    MObjectList eltList(elts.toList());
     std::sort(eltList.begin(),eltList.end(), *sortFunction);
     return eltList;
 }
@@ -279,7 +296,7 @@ MObject *Model::getModelObjectByName(MObjectType *mObjectType, const QString &na
     return nullptr;
 }
 
-QList<MObject *> Model::getModelObjectsOrderedByNames(MObjectType *mObjectType, bool useDerivedType, QSet<MObject *> *filterModelObjects)
+MObjectList Model::getModelObjectsOrderedByNames(MObjectType *mObjectType, bool useDerivedType, MObjectSet *filterModelObjects)
 {
     return _convertAndSortQSetToQList(
                 getModelObjects(mObjectType, useDerivedType, filterModelObjects),
@@ -296,10 +313,10 @@ MObjectType *Model::getModelObjectTypeByName(const QString &name)
     return _typeFactory->getModelObjectTypeByName(name);
 }
 
-void Model::dumpModelObjectTypeMap(const QString &msg)
+void Model::dumpModelObjectTypeMap(const QString &msg) const
 {
     qDebug() << "[Model::dumpModelObjectTypeMap] Dumping Model: "  << msg;
-    for (auto it = _mObjectTypeMap.begin(), itEnd = _mObjectTypeMap.end(); it != itEnd; ++it)
+    for (auto it = _mObjectTypeMap.cbegin(), itEnd = _mObjectTypeMap.cend(); it != itEnd; ++it)
     {
         MObjectType             *mObjectType = it.key();
         QMap<QString, MObject*> *mObjectMap  = it.value();
@@ -388,7 +405,7 @@ void Model::validateBusinessRules(QStringList &compilationErrors, const QSet<MOb
 }
 
 
-QSet<MObject*> Model::getModelObjects(MObjectType* mObjectType, bool useDerivedType, QSet<MObject*>* filterModelObjects)
+MObjectSet Model::getModelObjects(MObjectType* mObjectType, bool useDerivedType, MObjectSet* filterModelObjects)
 {
     QSet<MObjectType*> eltTypes = {mObjectType};
 
@@ -400,7 +417,7 @@ QSet<MObject*> Model::getModelObjects(MObjectType* mObjectType, bool useDerivedT
                      << mObjectType->getName() << "' is not instanciable and has no derived class that is";
     }
 
-    QSet<MObject*> mObjects;
+    MObjectSet mObjects;
     for (MObjectType *eltType : eltTypes)
     {
         QMap<QString, MObject*>* mObjectMap = _mObjectTypeMap.value(eltType, nullptr);
@@ -426,3 +443,40 @@ QSet<MObject*> Model::getModelObjects(MObjectType* mObjectType, bool useDerivedT
     return mObjects;
 }
 
+QMap<ElemId, MObject *> Model::getModelObjectsAsMap(MObjectType *mObjectType, bool useDerivedType, MObjectSet *filterModelObjects)
+{
+    QSet<MObjectType*> eltTypes = {mObjectType};
+
+    if (useDerivedType)
+    {
+        eltTypes = mObjectType->getInstanciableModelObjectTypes();
+        if (eltTypes.isEmpty())
+            qDebug() << "[ERROR][Model::getModelObjects] MObjectType '"
+                     << mObjectType->getName() << "' is not instanciable and has no derived class that is";
+    }
+
+    QMap<ElemId, MObject *> resMap;
+    for (MObjectType *eltType : eltTypes)
+    {
+        QMap<QString, MObject*>* mObjectMap = _mObjectTypeMap.value(eltType, nullptr);
+#ifdef __MB_TRACE_MODEL__
+        if (!mObjectMap)
+        {
+            qDebug() << "[ERROR][Model::getModelObjects] can't find MObjectType '"
+                     << eltType->getName() << "' in global map elementTypeMap...";
+        }
+        else
+#else
+        if (mObjectMap)
+#endif
+        {
+            for (auto it = mObjectMap->begin(), itEnd = mObjectMap->end(); it != itEnd; ++it)
+            {
+                MObject *mObj = it.value();
+                if(filterModelObjects == nullptr || !filterModelObjects->contains(mObj))
+                    resMap.insert(mObj->getId(), mObj);
+            }
+        }
+    }
+    return resMap;
+}

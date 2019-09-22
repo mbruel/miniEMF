@@ -61,11 +61,13 @@ public:
     inline LinkProperty *getContainerProperty() const;
     inline void setContainerProperty(LinkProperty *containerProperty);
 
-    MObject *createModelObject(uint projectId, const QMap<Property *, QVariant> &properties = QMap<Property *, QVariant>());
+    MObject *createModelObject(uint projectId, bool doDefaultInit = true, const QMap<Property *, QVariant> &properties = QMap<Property *, QVariant>());
 
     void initModelObjectWithDefaultValues(MObject *mObject, uint modelId);
 
     void updateMaxId(int elemId);
+
+    inline uint nbModelObjects() const;
 
 private:
     const int     _id;
@@ -108,6 +110,8 @@ bool MObjectType::isA(MObjectType *type) const
 
 LinkProperty *MObjectType::getContainerProperty() const { return _containerProperty; }
 void MObjectType::setContainerProperty(LinkProperty *containerProperty) { _containerProperty = containerProperty; }
+
+uint MObjectType::nbModelObjects() const { return _nbModelObjects; }
 
 #endif // ELEMENTTYPE_H
 

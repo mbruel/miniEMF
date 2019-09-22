@@ -64,11 +64,8 @@ void MObject::setName(const QString &name){ PROPERTY_NAME->setValue(this, name);
 
 QString MObject::getDefaultName()
 {
-    QString defaultName(getModelObjectTypeName());
-    defaultName += "_";
-    defaultName += getId();
-
-    return defaultName;
+    MObjectType *type = getModelObjectType();
+    return QString("%1 %2").arg(type->getLabel()).arg(type->nbModelObjects());
 }
 
 void MObject::validateLinkProperties(QStringList &ecoreErrors)
@@ -86,6 +83,16 @@ bool MObject::validateBusinessRules(QStringList &businessErrors, MObject *owner)
     Q_UNUSED(businessErrors);
     Q_UNUSED(owner);
     return true;
+}
+
+Property *MObject::getPropertyFromName(const QString &propertyName) const
+{
+    for (auto it = _propertyValueMap.cbegin(), itEnd = _propertyValueMap.cend(); it != itEnd ; ++it)
+    {
+        if (it.key()->getName() == propertyName)
+            return it.key();
+    }
+    return nullptr;
 }
 
 //Property *MObject::getProperty(QString propertyName)
@@ -119,8 +126,10 @@ void MObject::setPropertyValueFromElement(LinkProperty* property, MObject* value
 
 QVariant MObject::getPropertyMapKey(Property *mapProperty)
 {
-    Q_UNUSED(mapProperty);
-    return getName();
+    if (mapProperty->isALinkProperty() && static_cast<LinkProperty*>(mapProperty)->isMapProperty())
+        return getPropertyVariant(static_cast<MapLinkProperty*>(mapProperty)->getKey());
+    else
+        return getName();
 }
 
 
@@ -257,13 +266,13 @@ qDebug() << "[MB_TRACE][MObject::clone] - property: " << property->getName();
                         linkProperty->updateValue(newModelObject, linkedModelObject->toVariant());
                     }
                 }
-                else if (linkProperty->isEcoreContainer() && ecoreContainer)
+                else if (linkProperty->isEcoreContainer())
                 {
-                    if (ecoreContainer->getModelObjectType() == linkProperty->getLinkedModelObjectType())
+                    if (ecoreContainer && ecoreContainer->getModelObjectType() == linkProperty->getLinkedModelObjectType())
                         static_cast<LinkToOneProperty*>(linkProperty)->updateValue(newModelObject, ecoreContainer->toVariant());
                 }
                 else
-                    newModelObject->setPropertyValueFromQVariant(property, it.value());
+                    linkProperty->updateValue(newModelObject, it.value());
             }
             else
             {
@@ -406,7 +415,7 @@ void MObject::serialize(XmiWriter *xmiWriter, const QString &tagName, const QStr
     xmiWriter->writeEndElement();
 }
 
-void MObject::exportWithLinksAsNewModelSharingSameModelObjects(Model *subModel, const QSet<MObjectType *> &rootTypesToNotTake)
+void MObject::exportWithLinksAsNewModelSharingSameModelObjects(Model *subModel, const QSet<MObjectType *> &rootTypesToNotTake, bool onlyContainment)
 {
     if (rootTypesToNotTake.contains(getModelObjectType()))
         return;
@@ -423,11 +432,12 @@ void MObject::exportWithLinksAsNewModelSharingSameModelObjects(Model *subModel, 
             // (we don't take the handy e-opposites aka not serializable properties)
             if (property->isALinkProperty() && property->isSerializable())
             {
-                for (MObject *linkedModelObject : static_cast<LinkProperty*>(property)->getLinkedModelObjects(this) )
+                if (!onlyContainment || property->isEcoreContainment())
                 {
-//                    if (property->isEcoreContainer())
+                    for (MObject *linkedModelObject : static_cast<LinkProperty*>(property)->getLinkedModelObjects(this) )
                         linkedModelObject->exportWithLinksAsNewModelSharingSameModelObjects(subModel, rootTypesToNotTake);
                 }
+
             }
         }
     }
@@ -437,3 +447,159 @@ void MObject::exportWithLinksAsNewModelSharingSameModelObjects(Model *subModel, 
 #ifdef __USE_HMI__
 QIcon MObject::getIcon() {return QIcon();}
 #endif
+
+MObject *MObject::getEcoreContainer() const
+{
+    for (auto it = _propertyValueMap.cbegin(), itEnd = _propertyValueMap.cend(); it != itEnd ; ++it)
+    {
+        Property *property = it.key();
+        if (property->isEcoreContainer())
+        { // Ecore Container property is a LinkToOneProperty
+            MObject *container = static_cast<MObject*>(it.value().value<void*>());
+            if (container)
+                return container;
+        }
+    }
+    return nullptr;
+}
+
+LinkToOneProperty *MObject::getEcoreContainerProperty() const
+{
+    for (auto it = _propertyValueMap.cbegin(), itEnd = _propertyValueMap.cend(); it != itEnd ; ++it)
+    {
+        Property *property = it.key();
+        if (property->isEcoreContainer())
+        { // Ecore Container property is a LinkToOneProperty
+            MObject *container = static_cast<MObject*>(it.value().value<void*>());
+            if (container)
+                return static_cast<LinkToOneProperty*>(property);
+        }
+    }
+    return nullptr;
+}
+
+
+#include <QXmlStreamWriter>
+void MObject::xmlExport(QXmlStreamWriter &xmlWriter)
+{
+    QString objTypeName(getModelObjectTypeName());
+    xmlWriter.writeStartElement(objTypeName);
+
+    XmiWriter xmiWriter(nullptr, &xmlWriter);
+    auto itStart = _propertyValueMap.cbegin(), itEnd = _propertyValueMap.cend();
+
+    // First the attribute properties
+    for (auto it = itStart; it != itEnd; ++it)
+    {
+        Property *property = it.key();
+        if (property->isAttributeProperty())
+            property->serializeAsXmiAttribute(&xmiWriter, this);
+    }
+
+    // Now link properties
+    for (auto it = itStart; it != itEnd; ++it)
+    {
+        Property *property = it.key();
+        if (property->isALinkProperty() && property->isSerializable())
+        {
+            LinkProperty *linkProperty = static_cast<LinkProperty*>(property);
+            if (linkProperty->isEcoreContainer())
+                continue;
+            else
+            {
+                QString propName(linkProperty->getName());
+                if (linkProperty->isEcoreContainment())
+                {
+                    xmlWriter.writeStartElement(propName);
+                    for (MObject *linkObj : linkProperty->getLinkedModelObjects(this, true))
+                        linkObj->xmlExport(xmlWriter);
+                    xmlWriter.writeEndElement(); // propName
+                }
+                else
+                {
+                    for (MObject *linkObj : linkProperty->getLinkedModelObjects(this, true))
+                    {
+                        xmlWriter.writeStartElement(propName);
+                        xmlWriter.writeAttribute("type", linkObj->getModelObjectTypeName());
+                        xmlWriter.writeCharacters(linkObj->getName());
+                        xmlWriter.writeEndElement(); // propName
+                    }
+                }
+            }
+        }
+    }
+
+    xmlWriter.writeEndElement(); // objTypeName
+}
+
+
+#include <QDomNode>
+void MObject::xmlImport(const QDomNode &node, Model *model, QList<MObjectLinkings *> *objectLinks)
+{
+    auto itStart = _propertyValueMap.cbegin(), itEnd = _propertyValueMap.cend();
+
+    QDomElement elem = node.toElement();
+    // First the attribute properties
+    for (auto it = itStart; it != itEnd; ++it)
+    {
+        Property *property = it.key();
+        if (property->isAttributeProperty() && property != MObject::PROPERTY_NAME)
+        {
+            QString attrStr = elem.attribute(property->getName(), "").trimmed();
+            property->deserializeFromXmiAttribute(this, attrStr);
+        }
+    }
+
+    // Deserialize Child nodes (link properties)
+    QDomNodeList propNodes = node.childNodes();
+    for(int propIdx = 0; propIdx < propNodes.length(); ++propIdx)
+    {
+        QDomNode    propNode = propNodes.item(propIdx);
+        QDomElement propElem = propNode.toElement();
+        QString     propName = propElem.tagName();
+//        qDebug() << "[MB_TRACE][MObject::xmlImport] propName " << propName << ">>>>>";
+
+        LinkProperty *linkProperty = static_cast<LinkProperty*>(getPropertyFromName(propName));
+        if (linkProperty)
+        {
+            if (linkProperty->isEcoreContainment())
+            {
+                QDomNodeList objNodes = propElem.childNodes();
+                for(int objIdx = 0; objIdx < objNodes.length(); ++objIdx)
+                {
+                    QDomNode    objNode  = objNodes.item(objIdx);
+                    QDomElement objElem  = objNode.toElement();
+                    QString  objTypeName = objElem.tagName();
+//                    qDebug() << "objTypeName: " << objTypeName;
+
+                    MObjectType *childType = model->getModelObjectTypeByName(objTypeName);
+                    if (childType)
+                    {
+                        MObject *child = childType->createModelObject(model->getId(), false);
+                        model->add(child);
+                        child->xmlImport(objNode, model, objectLinks);
+                        linkProperty->addLink(this, child);
+                        if (linkProperty->getReverseLinkProperty())
+                            linkProperty->getReverseLinkProperty()->addLink(child, this);
+                    }
+                }
+            }
+            else
+            {
+//                qDebug() << "value: " << childElem.text();
+                QString  childTypeName = propElem.attribute("type", "").trimmed();
+                MObjectType *childType = model->getModelObjectTypeByName(childTypeName);
+                if (childType)
+                    objectLinks->append(new MObjectLinkings(this, linkProperty, childType, propElem.text()));
+                else
+                    qCritical() << "[MB_TRACE][MObject::xmlImport] ERROR: " << getName()
+                                << " there are no type " << childTypeName;
+            }
+        }
+        else
+            qCritical() << "[MB_TRACE][MObject::xmlImport] ERROR: " << getModelObjectTypeName()
+                        << " doesn't have a LinkProperty named " << propName;
+
+//        qDebug() << "[MB_TRACE][MObject::xmlImport] propName " << propName << "<<<<<";
+    }
+}

@@ -18,6 +18,7 @@ protected:
     void defineEnumPropertyValues() override;
     void defineEcoreContainmentProperties() override;
     void defineModelObjectTypeContainerProperties() override;
+    void defineMapPropertiesKey() override;
 
 private:
     SimpleExamplePropertyFactory() = default;

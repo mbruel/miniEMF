@@ -32,7 +32,7 @@ const double Property::DBL_INFINITE_NEG = -std::numeric_limits<double>::max();
 
 #include <QCoreApplication>
 Property::Property(const QString &name, const char *label, bool isSerializable):
-    _name(name), _label(label), _unit(""), _serializable(isSerializable)
+    _name(name), _label(label), _unit(""), _serializable(isSerializable), _propertiesUsingAsKey()
 {}
 
 QString Property::getLabel() const { return QCoreApplication::translate("Property", _label);} //QObject::tr(_label); }
@@ -72,14 +72,19 @@ uDoubleProperty::~uDoubleProperty(){}
 PerCentProperty::PerCentProperty(const QString &name, const char *label, const double &defaultValue) : DoubleProperty(name, label, defaultValue){}
 PerCentProperty::~PerCentProperty(){}
 
+
+
 // #######################
 // #### ENUM PROPERTY ####
 
 EnumProperty::EnumProperty(const QString &name, const char *label, int defaultValue) :
     AttributeProperty<int>(name, label, defaultValue), _enumValues(){}
 
+EnumProperty::~EnumProperty()
+{}
 
-QString EnumProperty::getValueAsString(MObject *mObject)
+
+QString EnumProperty::getValueAsString(const MObject *const mObject)
 {
     return QCoreApplication::translate("Constant", _enumValues.value(getValue(mObject)).toStdString().c_str());
 }
@@ -89,12 +94,12 @@ void EnumProperty::setEnumValues(const QMap<int, QString> &enumValues)
     _enumValues = enumValues;
 }
 
-QMap<int,QString> EnumProperty::getEnumValues()
+QMap<int,QString> EnumProperty::getEnumValues() const
 {
     return _enumValues;
 }
 
-QStringList EnumProperty::getAllValues()
+QStringList EnumProperty::getAllValues() const
 {
     return _enumValues.values();
 }
@@ -120,9 +125,8 @@ int EnumProperty::getEnumKeyByValue(QString value) const
 }
 
 #ifdef __USE_HMI__
-QWidget *EnumProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
+QWidget *EnumProperty::getEditor(MObject * const mObj, QWidget *parent)
 {
-    Q_UNUSED(model)
     QComboBox *combobox = new QComboBox(parent);
     ushort index = 0;
     int currentValue = 0, currentValueIndex = 0;
@@ -142,7 +146,7 @@ QWidget *EnumProperty::getEditor(MObject * const mObj, Model *model, QWidget *pa
     return combobox;
 }
 
-int EnumProperty::getEditorValue(QWidget *editor)
+int EnumProperty::getEditorValue(QWidget *editor) const
 {
     return static_cast<QComboBox*>(editor)->currentData().toInt();
 }
@@ -177,7 +181,7 @@ LinkProperty::LinkProperty(MObjectType *const eltType,
                            const char *label, bool isMandatory,
                            bool isSerializable) :
     Property(name, label, isSerializable),
-    _mObjectType(eltType),
+    _mObjectType(eltType),    
     _linkedModelObjectType(linkedEltType),
     _isEcoreContainment(false),
     _reverseLinkProperty(nullptr),
@@ -263,10 +267,17 @@ void LinkToOneProperty::setValueFromXMIStringIdList(MObject *mObject, const QStr
     }
 }
 
-MObject* LinkToOneProperty::getValue(MObject* mObject)
+void LinkToOneProperty::setValueFromLinkedObjectName(MObject *mObject, MObjectType *linkedObjType, const QString &linkedObjName, Model *model)
+{
+    MObject *linkedObj = model->getModelObjectByName(linkedObjType, linkedObjName);
+    if (linkedObj)
+        updateValue(mObject, linkedObj->toVariant());
+}
+
+MObject* LinkToOneProperty::getValue(const MObject *const mObject) const
 {
     if(mObject)
-        return mObject->getLinkPropertyValue<MObject>(this);
+        return mObject->getLinkPropertyValue<MObject>((Property*)this);
 
     return nullptr;
 }
@@ -296,7 +307,7 @@ void LinkToOneProperty::updateValue(MObject* mObject, QVariant value)
     }
 }
 
-void LinkToOneProperty::updateValue(MObject * const mObject, const MObjectList &values)
+void LinkToOneProperty::updateValue(MObject * const mObject, MObjectList &values)
 {
     MObject *value = nullptr;
     if (values.size())
@@ -477,3 +488,19 @@ QWidget *LinkToOneProperty::getEditorUsingAlsoDerivedLinkedObjects(MObject * con
 }
 #endif
 
+
+MapLinkProperty::MapLinkProperty(MObjectType * const eltType,
+                                 MObjectType * const linkedEltType,
+                                 const QString &name,
+                                 const char *label,
+                                 bool isMandatory,
+                                 bool isSerializable)
+    : MultiMapLinkPropertyInterface(eltType, linkedEltType, name, label, isMandatory, isSerializable),
+      _keyProperty(nullptr)
+{}
+
+void MapLinkProperty::setKey(Property *key)
+{
+    _keyProperty = key;
+    key->_propertiesUsingAsKey.insert(this);
+}

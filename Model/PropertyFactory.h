@@ -52,6 +52,7 @@ protected:
     virtual void defineEnumPropertyValues() = 0;
     virtual void defineEcoreContainmentProperties() = 0;
     virtual void defineModelObjectTypeContainerProperties() = 0;
+    virtual void defineMapPropertiesKey() = 0;
 };
 
 

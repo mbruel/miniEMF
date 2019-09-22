@@ -31,7 +31,7 @@ Person *createPerson(Model *model, const char *name, uint age, const char *sex)
         {Person::PROPERTY_NAME, name},
         {Person::PROPERTY_age, age}
     };
-    Person *p = static_cast<Person*>(Person::TYPE->createModelObject(model->getId(), properties));
+    Person *p = static_cast<Person*>(Person::TYPE->createModelObject(model->getId(), false, properties));
     p->setSex(sex);
 
     model->add(p);
@@ -44,7 +44,7 @@ Meeting *createMeeting(Model *model, const char *name)
         {Meeting::PROPERTY_NAME, name},
         {Meeting::PROPERTY_date, QDateTime::currentDateTime()}
     };
-    Meeting *m = static_cast<Meeting*>(Meeting::TYPE->createModelObject(model->getId(), properties));
+    Meeting *m = static_cast<Meeting*>(Meeting::TYPE->createModelObject(model->getId(), false, properties));
 
     model->add(m);
     return m;

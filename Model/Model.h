@@ -22,24 +22,25 @@
 #ifndef MODEL_H
 #define MODEL_H
 
-#include <QString>
-#include <QMap>
+#include "aliases.h"
+
 #include <QSet>
 
 
 class MObject;
 class MObjectType;
 class MObjectTypeFactory;
-class PropertyFactory;
+
 
 class Model
 {
-    friend class XmiWriter;  // to access _typeFactory
+    friend class XmiWriter; // to access _typeFactory
     friend class XMIService; // for exports
 
-private:
+
+private:  
     MObjectTypeFactory *_typeFactory;
-    QMap<MObjectType*, QMap<QString, MObject*>* > _mObjectTypeMap;
+    QMap<MObjectType*, QMap<ElemId, MObject*>* > _mObjectTypeMap;
     QMap<MObjectType*, uint> _nextElemId;
 
     bool          _ownModelObjects; //!< set to false for subModels, no destuction of the ELements in destructor
@@ -63,8 +64,10 @@ public:
     Model & operator=(const Model &other) = delete;
 
     ~Model();
-    void shallowCopySubsetOfMainModel(const QSet<MObject*> &elementsToCopy, const QSet<MObjectType*> &rootTypesToNotTake = QSet<MObjectType*>());
-    Model *cloneSubset(const QSet<MObject*> &mainElements);
+    void shallowCopySubsetOfMainModel(const MObjectSet &elementsToCopy,
+                                      const QSet<MObjectType*> &rootTypesToNotTake = QSet<MObjectType*>(),
+                                      bool onlyContainment = false);
+    Model *cloneSubset(const MObjectSet &mainElements);
     QString getCopyName(MObject *mObjToCopy) const;
 
     static Model *clone(Model *model);
@@ -82,16 +85,18 @@ public:
     void validateModel(QStringList &compilationErrors);
     void validateBusinessRules(QStringList &compilationErrors, const QSet<MObjectType*> &typesToExclude = QSet<MObjectType*>());
 
-    QSet<MObject *> getModelObjects(MObjectType *mObjectType, bool useDerivedType = false, QSet<MObject *> *filterModelObjects = nullptr);
+    MObjectSet getModelObjects(MObjectType *mObjectType, bool useDerivedType = false, MObjectSet *filterModelObjects = nullptr);
+    QMap<ElemId, MObject *> getModelObjectsAsMap(MObjectType *mObjectType, bool useDerivedType = false, MObjectSet *filterModelObjects = nullptr);
     MObject        *getModelObjectById(MObjectType *mObjectType, const QString &id);
     MObject        *getModelObjectByName(MObjectType *mObjectType, const QString &name);
 
-    QList<MObject *> getModelObjectsOrderedByNames(MObjectType *mObjectType, bool useDerivedType = false, QSet<MObject *> *filterModelObjects = nullptr);
+    MObjectList getModelObjectsOrderedByNames(MObjectType *mObjectType, bool useDerivedType = false, MObjectSet *filterModelObjects = nullptr);
 
+    inline QList<MObjectType*> getModelObjectTypes() const;
     QList<MObjectType*> getRootModelObjectTypes();
     MObjectType *getModelObjectTypeByName(const QString &name);
 
-    void dumpModelObjectTypeMap(const QString &msg = "");
+    void dumpModelObjectTypeMap(const QString &msg = "") const;
 
     inline QString getDate() const;
     inline QString getExportDescription() const;
@@ -103,11 +108,15 @@ public:
     bool operator ==(const Model &m); //!< We check that the ids of the mObjects match (not the object themselves as they will be different)
 
 private:
-    QMap<QString, MObject*> *_getModelObjectMap(MObjectType* mObjectType);
+    QMap<ElemId, MObject*> *_getModelObjectMap(MObjectType* mObjectType);
+
+    void rebuildMapProperty(MapLinkProperty *mapProp);
 
     typedef bool (*SortElementView)(MObject*, MObject*);
-    static QList<MObject *> _convertAndSortQSetToQList(const QSet<MObject*> &elts, SortElementView sortFunction);
+    static QList<MObject *> _convertAndSortQSetToQList(const MObjectSet &elts, SortElementView sortFunction);
 };
+
+QList<MObjectType *> Model::getModelObjectTypes() const { return _mObjectTypeMap.keys(); }
 
 QString Model::getDate() const { return _date; }
 QString Model::getExportDescription() const { return _exportDescription; }

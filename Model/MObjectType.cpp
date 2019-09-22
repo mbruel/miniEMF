@@ -87,7 +87,7 @@ void MObjectType::addSuperModelObjectType(MObjectType *superModelObjectType) {
 }
 
 #include "Model/Property.h"
-MObject *MObjectType::createModelObject(uint projectId, const QMap<Property *, QVariant> &properties)
+MObject *MObjectType::createModelObject(uint projectId, bool doDefaultInit, const QMap<Property *, QVariant> &properties)
 {
     if (_elementCreator == &MObject::createModelObject)
         return nullptr;
@@ -111,7 +111,9 @@ MObject *MObjectType::createModelObject(uint projectId, const QMap<Property *, Q
         if (containerProp)
             containerProp->updateValue(mObject, properties.value(containerProp));
 
-        mObject->initDefaultProperties();
+        if (doDefaultInit)
+            mObject->initDefaultProperties();
+
         return mObject;
     }
 }
@@ -119,7 +121,7 @@ MObject *MObjectType::createModelObject(uint projectId, const QMap<Property *, Q
 void MObjectType::initModelObjectWithDefaultValues(MObject *mObject, uint modelId)
 {
     mObject->setId(QString("%1_%2_%3").arg(getId()).arg(modelId).arg(_nbModelObjects));
-    mObject->setName(getLabel()+"_"+mObject->getId());
+    mObject->setName(QString("%1 %2").arg(getLabel()).arg(_nbModelObjects));
 }
 
 void MObjectType::updateMaxId(int elemId)

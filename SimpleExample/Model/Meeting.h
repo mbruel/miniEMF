@@ -21,10 +21,6 @@ public:
     static DateTimeProperty         *PROPERTY_date;
     static MapLinkProperty          *PROPERTY_participants;
 
-
-    QVariant getPropertyMapKey(Property *mapProperty) override;
-
-
     // Getters
     QDateTime getDate();
     MObjectMap *getParticipants();
@@ -32,7 +28,7 @@ public:
 
     // Setters
     void setDate(QDateTime value);
-    void setParticipants(const MObjectList &values);
+    void setParticipants(MObjectList &values);
 
     // Others
     QString getInfo();

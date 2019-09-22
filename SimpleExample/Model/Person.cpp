@@ -24,14 +24,6 @@ Person::~Person()
 #endif
 }
 
-QVariant Person::getPropertyMapKey(Property *mapProperty)
-{
-    if (mapProperty == Person::PROPERTY_childs)
-        return getAge();
-    else
-        return getName();
-}
-
 int              Person::getAge()     { return PROPERTY_age->getValue(this); }
 int              Person::getSex()     { return PROPERTY_sex->getValue(this); }
 QString          Person::getSexName() { return PROPERTY_sex->getEnumValueByKey(getSex()); }
@@ -47,9 +39,11 @@ void Person::setSex(const QString &value)
     PROPERTY_sex->setValue(this, sex);
 }
 
-void Person::setPartner(MObject *value)            { PROPERTY_partner->updateValue(this, value->toVariant()); }
-void Person::setParents(const MObjectList &values) { PROPERTY_parents->updateValue(this, values); }
-void Person::setChilds(const MObjectList &values)  { PROPERTY_childs->updateValue(this,  values); }
+void Person::setPartner(MObject *value)      { PROPERTY_partner->updateValue(this, value->toVariant()); }
+void Person::setParents(MObjectList &values) { PROPERTY_parents->updateValue(this, values); }
+void Person::setChilds(MObjectList &values)  { PROPERTY_childs->updateValue(this,  values); }
+void Person::setParents(MObjectList &&values) { PROPERTY_parents->updateValue(this, values); }
+void Person::setChilds(MObjectList &&values)  { PROPERTY_childs->updateValue(this,  values); }
 
 
 QString Person::getInfo()

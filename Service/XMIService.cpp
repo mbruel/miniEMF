@@ -51,7 +51,7 @@ MObject *XMIService::deserializeModelObject(QDomNode node, MObjectType *mObjectT
 #ifdef __MB_TRACE_loadXMI__
         qDebug() << "[MB_TRACE] create new MObject of type: " <<   mObjectType->getName();
 #endif
-        mObject = mObjectType->createModelObject(0);
+        mObject = mObjectType->createModelObject(0, false); // we don't want the default initialization
         initFromNode(mObject, node);
         _model->add(mObjectType, mObject);
     }
@@ -98,7 +98,6 @@ MObject *XMIService::deserializeModelObject(QDomNode node, MObjectType *mObjectT
             property->deserializeFromXmiAttribute(mObject, strAttr);
         }
     }
-    mObject->initDefaultProperties();
 
     // Deserialize Child nodes
     QDomNodeList childNodes = node.childNodes();
@@ -188,9 +187,11 @@ bool XMIService::initImportXMI(const QString &xmiPath)
 
 void XMIService::loadXMI(Model *model, bool createDefaultObjects)
 {
+    Q_UNUSED(createDefaultObjects);
+
     _model = model;
 
-    QSet<MObjectLinkings*> elementLinks;
+    QSet<MObjectLinkings*> objectLinks;
     for(QDomNode node = _docXMI->documentElement().firstChild(); !node.isNull(); node = node.nextSibling())
     {
         QString nodeType(node.nodeName()); //osam.functional:Function
@@ -200,20 +201,24 @@ void XMIService::loadXMI(Model *model, bool createDefaultObjects)
         MObjectType *mObjectType = _model->getModelObjectTypeByName(nodeType);
         Q_ASSERT( mObjectType != nullptr);
 
-        deserializeModelObject(node, mObjectType, &elementLinks);
+        deserializeModelObject(node, mObjectType, &objectLinks);
     }
+
+
+    // add default objects, if needed
+//    if (createDefaultObjects)
+//        MyApplication::getInstance()->createModelDefaultObjects();
+
+
 
     // Deserialize links between mObjects
-    for (MObjectLinkings *elementLinking : elementLinks)
+    for (MObjectLinkings *objLink : objectLinks)
     {
-        MObject      *mObject      = elementLinking->getModelObject();
-        LinkProperty *linkProperty = elementLinking->getLinkProperty();
-        QString       linkValue(elementLinking->getLinkValue().trimmed());
-
-        linkProperty->setValueFromXMIStringIdList(mObject, linkValue, _model);
+        LinkProperty *linkProperty = objLink->linkProp;
+        linkProperty->setValueFromXMIStringIdList(objLink->mObj, objLink->linkValue, model);
     }
 
-    qDeleteAll(elementLinks);
+    qDeleteAll(objectLinks);
 
     delete _docXMI;
     _docXMI = nullptr;
@@ -266,7 +271,7 @@ MObject *XMIService::deserializeModelObject(
         const QString &endTag,
         QSet<MObjectLinkings *> &elementLinkings)
 {
-    MObject *mObject = mObjectType->createModelObject(0);
+    MObject *mObject = mObjectType->createModelObject(0, false); // we don't want the default initialization
     mObject->setId(xmlReader.attributes().value("id").toString());
 
     model->add(mObjectType, mObject);
@@ -287,8 +292,6 @@ MObject *XMIService::deserializeModelObject(
         else
             elementLinkings.insert(new MObjectLinkings(mObject, static_cast<LinkProperty*>(property), strAttr));
     }
-
-    mObject->initDefaultProperties();
 
     // Now all the containment properties (childs) until we reach the endTag
     QMap<QString, LinkProperty *>  containmentProps = mObject->getContainmentProperties();

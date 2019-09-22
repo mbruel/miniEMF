@@ -39,6 +39,12 @@ void SimpleExamplePropertyFactory::defineModelObjectTypeContainerProperties()
 
 }
 
+void SimpleExamplePropertyFactory::defineMapPropertiesKey()
+{
+    Person::PROPERTY_childs->setKey(Person::PROPERTY_age);
+    Person::PROPERTY_meetings->setKey(Meeting::PROPERTY_date);
+}
+
 void SimpleExamplePropertyFactory::linkAllReverseProperties()
 {
     linkReverseProperties(Person::PROPERTY_partner,  Person::PROPERTY_partner);

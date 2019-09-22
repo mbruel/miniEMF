@@ -41,6 +41,8 @@
 
 class Property
 {
+    friend class MapLinkProperty;
+
 public:
     virtual ~Property() = default;
 
@@ -65,7 +67,7 @@ public:
     virtual QVariant convertIntoUpdatableValue(QVariant value);
 
 #ifdef __USE_HMI__
-    virtual QWidget *getEditor(MObject *const mObj, Model *model = nullptr, QWidget *parent = nullptr) = 0;
+    virtual QWidget *getEditor(MObject *const mObj, QWidget *parent = nullptr) = 0;
     virtual QVariant getEditorUpdatedVariant(MObject *const mObj, QWidget *editor) = 0;
     virtual QValidator *getEditorValidator(QObject *parent) {Q_UNUSED(parent);return nullptr;}
 #endif
@@ -79,15 +81,22 @@ public:
     static const double DBL_INFINITE_POS;
     static const double DBL_INFINITE_NEG;
 
+    inline bool hasPropertiesUsingAsKey() const;
+    inline const QSet<MapLinkProperty*> &getPropertiesUsingAsKey() const;
+
 protected:
     Property(const QString &name, const char *label, bool isSerializable = true);
 
 protected:
-    const QString _name;
-    const char   *_label;
-    const char   *_unit;
-    const bool    _serializable;
+    const QString          _name;
+    const char            *_label;
+    const char            *_unit;
+    const bool             _serializable;
+    QSet<MapLinkProperty*> _propertiesUsingAsKey;
 };
+
+bool Property::hasPropertiesUsingAsKey() const {return _propertiesUsingAsKey.size() > 0;}
+const QSet<MapLinkProperty*> &Property::getPropertiesUsingAsKey() const {return _propertiesUsingAsKey;}
 
 
 template<typename TypeAttribute> class AttributeProperty : public Property{
@@ -98,9 +107,9 @@ public:
     bool isAttributeProperty() const override { return true; }
 
     void setDefaultValue(const TypeAttribute &defaultValue)  { _defaultValue = defaultValue; }
-    bool getDefaultValue() const                        { return _defaultValue; }
+    TypeAttribute getDefaultValue() const                    { return _defaultValue; }
 
-    TypeAttribute getValue(const MObject *mObject);
+    TypeAttribute getValue(const MObject *const mObject);
     void setValue(MObject *const mObject, const TypeAttribute &value);
 
     // Mandatory function to be instanciable
@@ -112,7 +121,7 @@ public:
     QVariant convertIntoUpdatableValue(QVariant value) override {return Property::convertIntoUpdatableValue(value);}
 
 #ifdef __USE_HMI__
-    virtual QWidget *getEditor(MObject *const mObj, Model *model = nullptr, QWidget *parent = nullptr) override;
+    virtual QWidget *getEditor(MObject *const mObj, QWidget *parent = nullptr) override;
     virtual QVariant getEditorUpdatedVariant(MObject *const mObj, QWidget *editor) override;
     virtual QValidator *getEditorValidator(QObject *parent) override;
 #endif
@@ -152,24 +161,24 @@ class EnumProperty : public AttributeProperty<int>
 {
 public:
     EnumProperty(const QString &name, const char *label, int defaultValue = 0);
-    ~EnumProperty() = default;
+    ~EnumProperty();
 
-    QString getValueAsString(MObject *const mObject);
-    void setEnumValues(const QMap<int,QString> &enumValues);
+    QString getValueAsString(const MObject *const mObject);
+    void setEnumValues(const QMap<int,QString> &enumValues);    
 
-    QMap<int, QString> getEnumValues();
+    QMap<int, QString> getEnumValues() const;
     QString getEnumValueByKey(int key) const;
     int getEnumKeyByValue(QString value) const;
-    QStringList getAllValues();
+    QStringList getAllValues() const;
 
     // Mandatory function to be instanciable
     void serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject) override;
     void deserializeFromXmiAttribute(MObject *const mObject, const QString &xmiValue) override;
 
 #ifdef __USE_HMI__
-    QWidget *getEditor(MObject *const mObj, Model *model = nullptr, QWidget *parent = nullptr) override;
+    QWidget *getEditor(MObject *const mObj, QWidget *parent = nullptr) override;
     QVariant getEditorUpdatedVariant(MObject *const mObj, QWidget *editor) override;
-    int getEditorValue(QWidget *editor);
+    int getEditorValue(QWidget *editor) const;
     void setEditorValue(QWidget *editor, int value);
 #endif
 
@@ -186,7 +195,7 @@ public:
 
     bool isAttributeProperty() const override { return true; }
 
-    QList<TypeAttribute> getValue(MObject *const mObject);
+    QList<TypeAttribute> getValue(const MObject *const mObject);
     void setValue(MObject *const mObject, const QList<TypeAttribute> &value);
 
     // Mandatory function to be instanciable
@@ -196,7 +205,7 @@ public:
     virtual void deserializeFromXmiAttribute(MObject *const mObject, const QString &xmiValue) override;
 
 #ifdef __USE_HMI__
-    QWidget *getEditor(MObject *const mObj, Model *model = nullptr, QWidget *parent = nullptr) override {Q_UNUSED(mObj);return new QWidget(parent);}
+    QWidget *getEditor(MObject *const mObj, QWidget *parent = nullptr) override {Q_UNUSED(mObj);return new QWidget(parent);}
     QVariant getEditorUpdatedVariant(MObject *const mObj, QWidget *editor) override {Q_UNUSED(mObj);Q_UNUSED(editor); return QVariant();}
 #endif
 };
@@ -215,10 +224,10 @@ public:
 
     virtual ~LinkProperty() = default;
 
-    virtual void updateValue(MObject *const mObject, QVariant value) override = 0;
+    virtual void updateValue(MObject *const mObject, QVariant value) = 0;
 
     // Handy setter from a LinkToMany properties
-    virtual void updateValue(MObject *const mObject, const MObjectList &values) = 0;
+    virtual void updateValue(MObject *const mObject, MObjectList &values) = 0;
 
     virtual void addLink(MObject *const mObject, MObject *const mObjectToAdd) = 0;
     virtual void removeLink(MObject *const mObject, MObject *const mObjectToRemove) = 0;
@@ -244,11 +253,12 @@ public:
     void deserializeFromXmiAttribute(MObject *mObject, const QString &xmiValue) override;
 
     virtual void setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model) = 0;
+    virtual void setValueFromLinkedObjectName(MObject *mObject, MObjectType *linkedObjType, const QString &linkedObjName, Model *model) = 0;
 
      void validateModelObject(MObject *mObject, QStringList &ecoreErrors);
 
 #ifdef __USE_HMI__
-    virtual QWidget *getEditor(MObject *const mObj, Model *model = nullptr, QWidget *parent = nullptr) override {Q_UNUSED(mObj);return new QWidget(parent);}
+    virtual QWidget *getEditor(MObject *const mObj, QWidget *parent = nullptr) override {Q_UNUSED(mObj);return new QWidget(parent);}
     virtual QVariant getEditorUpdatedVariant(MObject *const mObj, QWidget *editor) override {Q_UNUSED(mObj);Q_UNUSED(editor); return QVariant();}
 #endif
 
@@ -266,7 +276,7 @@ protected:
 
 class LinkToOneProperty : public LinkProperty
 {
-public:
+public:   
     virtual bool isOrdered()            const override { return false; }
     virtual bool isMapProperty()        const override { return false; }
     virtual bool isALinkToOneProperty() const override { return true; }
@@ -280,24 +290,25 @@ public:
     QVariant createNewInitValue() override;
 
     void updateValue(MObject *const mObject, QVariant value) override;
-    void updateValue(MObject *const mObject, const MObjectList &values) override;
+    void updateValue(MObject *const mObject, MObjectList &values) override;
 
     void addLink(MObject *const mObject, MObject *const mObjectToAdd) override;
     void removeLink(MObject *const mObject, MObject *const mObjectToRemove) override;
     MObjectList getLinkedModelObjects(MObject *const mObject, bool ordered = false) override;
 
-    MObject* getValue(MObject *const mObject);
+    MObject* getValue(const MObject *const mObject) const;
     void setValue(MObject *const mObject, MObject *const value);
     void setValues(MObject *mObject, const MObjectList &values) override;
 
     void setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model) override;
+    void setValueFromLinkedObjectName(MObject *mObject, MObjectType *linkedObjType, const QString &linkedObjName, Model *model)  override;
 
 #ifdef __USE_HMI__
-    virtual QWidget *getEditor(MObject *const mObj, Model *model = nullptr, QWidget *parent = nullptr) override;
+    virtual QWidget *getEditor(MObject *const mObj, QWidget *parent = nullptr) override;
     virtual QVariant getEditorUpdatedVariant(MObject *const mObj, QWidget *editor) override;
     MObject *getEditorValue(QWidget *editor);
     void setEditorValue(QWidget *editor, MObject *value);
-    QWidget *getEditorUsingAlsoDerivedLinkedObjects(MObject *const mObj, Model *model, QWidget *parent = nullptr);
+    QWidget *getEditorUsingAlsoDerivedLinkedObjects(MObject *const mObj, QWidget *parent = nullptr);
 #endif
 
     inline void setDefaultLinkedObject(MObject *mObject);
@@ -327,22 +338,39 @@ public:
     virtual void updateValue(MObject *const mObject, QVariant value) override;
     virtual MObjectList getLinkedModelObjects(MObject *const mObject, bool ordered = true) override;
 
-    Container<Args..., MObject*> *getValues(MObject *const mObject) ;
+    Container<Args..., MObject*> *getValues(const MObject *const mObject) ;
     void setValues(MObject *mObject, Container<Args..., MObject*> *values);
     void setValues(MObject *mObject, const MObjectList &values) override;
 
     // Handy setter from a QSet
-    void updateValue(MObject *const mObject, const MObjectList &values) override;
+    void updateValue(MObject *const mObject, MObjectList &values) override;
 
     virtual MObjectMap *getLinkedModelObjectsMap(MObject *const mObject) override {Q_UNUSED(mObject);return nullptr;}
     virtual void setValuesFromMap(MObject *mObject, MObjectMap *values) override {Q_UNUSED(mObject);Q_UNUSED(values);}
 
     virtual void serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject) override;
     virtual void setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model) override;
+    void setValueFromLinkedObjectName(MObject *mObject, MObjectType *linkedObjType, const QString &linkedObjName, Model *model)  override;
 };
 
-template <> inline bool MapLinkProperty::isMapProperty()      const {return true;}
-template <> inline bool MultiMapLinkProperty::isMapProperty() const {return true;}
+
+class MapLinkProperty : public MultiMapLinkPropertyInterface {
+public:
+    bool isMapProperty()  const override {return true;}
+
+    MapLinkProperty(MObjectType *const eltType, MObjectType *const linkedEltType, const QString &name, const char *label, bool isMandatory, bool isSerializable = true);
+    virtual ~MapLinkProperty() = default;
+
+    inline Property *getKey() const;
+    void setKey(Property *key);
+
+private:
+    Property *_keyProperty;
+};
+
+Property *MapLinkProperty::getKey() const {return _keyProperty;}
+
+
 template <> inline bool LinkToManyProperty::isOrdered()       const {return false;}
 
 /*
@@ -365,7 +393,7 @@ public:
     void setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model) override;
 
 #ifdef __USE_HMI__
-    virtual QWidget *getEditor(MObject *const mObj, Model *model = nullptr, QWidget *parent = nullptr) override;
+    virtual QWidget *getEditor(MObject *const mObj, QWidget *parent = nullptr) override;
     virtual QVariant getEditorUpdatedVariant(MObject *const mObj, QWidget *editor) override;
 #endif
 };
@@ -392,7 +420,7 @@ template <template <typename...> class Container, typename... Args>
     return QVariant::fromValue(static_cast<void*>(new Container<Args..., MObject*>()));
 }
 template <template <typename...> class Container, typename... Args>
-    Container<Args..., MObject*> * GenericLinkToManyProperty<Container, Args...>::getValues(MObject *const mObject)
+    Container<Args..., MObject*> * GenericLinkToManyProperty<Container, Args...>::getValues(const MObject * const mObject)
 {
     return mObject->getLinkPropertyValue<Container<Args..., MObject*>>(this);
 }
@@ -416,7 +444,17 @@ template <template <typename...> class Container, typename... Args>
 {
     xmiWriter->addAttribute(_name, getLinkedModelObjects(mObject, true));
 }
-
+template <template <typename...> class Container, typename... Args>
+    void GenericLinkToManyProperty<Container, Args...>::setValueFromLinkedObjectName(MObject *mObject, MObjectType *linkedObjType, const QString &linkedObjName, Model *model)
+{
+        MObject *linkedObj = model->getModelObjectByName(linkedObjType, linkedObjName);
+        if (linkedObj)
+        {
+            addLink(mObject, linkedObj);
+            if (_reverseLinkProperty)
+                _reverseLinkProperty->addLink(linkedObj, mObject);
+        }
+}
 //////////////////////////////////////////////////////////
 // Template specializations for GenericLinkToManyProperty
 //////////////////////////////////////////////////////////
@@ -438,30 +476,16 @@ template <> inline MObjectList OrderedLinkToManyProperty::getLinkedModelObjects(
     Q_UNUSED(ordered)
     return *(getValues(mObject));
 }
-template <> inline MObjectList MapLinkProperty::getLinkedModelObjects(MObject *const mObject, bool ordered)
+template <> inline MObjectList MultiMapLinkPropertyInterface::getLinkedModelObjects(MObject *const mObject, bool ordered)
 {
     Q_UNUSED(ordered)
     return getValues(mObject)->values();
 }
-template <> inline MObjectList MultiMapLinkProperty::getLinkedModelObjects(MObject *const mObject, bool ordered)
-{
-    Q_UNUSED(ordered)
-    return getValues(mObject)->values();
-}
-
-template <> inline MObjectMap *MapLinkProperty::getLinkedModelObjectsMap(MObject *const mObject)
+template <> inline MObjectMap *MultiMapLinkPropertyInterface::getLinkedModelObjectsMap(MObject *const mObject)
 {
     return getValues(mObject);
 }
-template <> inline  void MapLinkProperty::setValuesFromMap(MObject *mObject, MObjectMap *values)
-{
-    setValues(mObject, values);
-}
-template <> inline MObjectMap *MultiMapLinkProperty::getLinkedModelObjectsMap(MObject *const mObject)
-{
-    return getValues(mObject);
-}
-template <> inline  void MultiMapLinkProperty::setValuesFromMap(MObject *mObject, MObjectMap *values)
+template <> inline  void MultiMapLinkPropertyInterface::setValuesFromMap(MObject *mObject, MObjectMap *values)
 {
     MObjectMultiMap multiMap = *values;
     setValues(mObject, &multiMap);
@@ -478,14 +502,7 @@ template <> inline void OrderedLinkToManyProperty::setValues(MObject *mObject, c
     MObjectList mObjList = values;
     setValues(mObject, &mObjList);
 }
-template <> inline void MapLinkProperty::setValues(MObject *mObject, const MObjectList &values)
-{
-    MObjectMap map;
-    for (MObject *val : values)
-        map.insert(val->getPropertyMapKey(this), val);
-    setValues(mObject, &map);
-}
-template <> inline void MultiMapLinkProperty::setValues(MObject *mObject, const MObjectList &values)
+template <> inline void MultiMapLinkPropertyInterface::setValues(MObject *mObject, const MObjectList &values)
 {
     MObjectMultiMap map;
     for (MObject *val : values)
@@ -550,34 +567,8 @@ template <> inline void OrderedLinkToManyProperty::updateValue(MObject *const mO
 
     setValues(mObject, newValueList);
 }
-template <> inline void MapLinkProperty::updateValue(MObject *const mObject, QVariant value)
-{
-    if (!value.canConvert<void*>())
-        return;
 
-    MObjectMap *newValueMap = static_cast<MObjectMap*>(value.value<void*>()),
-            *oldValueMap = mObject->getLinkPropertyValue<MObjectMap>(this);
-    if (*newValueMap == *oldValueMap)
-        return;
-
-    if (_reverseLinkProperty)
-    {
-        for (auto it = newValueMap->cbegin() , itEnd = newValueMap->cend(); it != itEnd; ++it)
-        {
-            if (!oldValueMap->contains(it.key()))
-                _reverseLinkProperty->addLink(it.value(), mObject);
-        }
-
-        for (auto it = oldValueMap->cbegin() , itEnd = oldValueMap->cend(); it != itEnd; ++it)
-        {
-            if(!newValueMap->contains(it.key()))
-                _reverseLinkProperty->removeLink(it.value(), mObject);
-        }
-    }
-
-    setValues(mObject, newValueMap);
-}
-template <> inline void MultiMapLinkProperty::updateValue(MObject *const mObject, QVariant value)
+template <> inline void MultiMapLinkPropertyInterface::updateValue(MObject *const mObject, QVariant value)
 {
     if (!value.canConvert<void*>())
         return;
@@ -606,30 +597,27 @@ template <> inline void MultiMapLinkProperty::updateValue(MObject *const mObject
 
 
 
-template <> inline void LinkToManyProperty::updateValue(MObject *const mObject, const MObjectList &values)
+template <> inline void LinkToManyProperty::updateValue(MObject *const mObject, MObjectList &values)
 {
     MObjectSet set(values.toSet());
     updateValue(mObject, QVariant::fromValue(static_cast<void*>(&set)));
-}
-template <> inline void OrderedLinkToManyProperty::updateValue(MObject *const mObject, const MObjectList &values)
-{
-    MObjectList listCopy(values);
-    updateValue(mObject, QVariant::fromValue(static_cast<void*>(&listCopy)));
-}
-template <> inline void MapLinkProperty::updateValue(MObject *const mObject, const MObjectList &values)
-{
-    MObjectMap map;
-    for (MObject *val : values)
-        map[val->getPropertyMapKey(this)] = val;
-    updateValue(mObject, QVariant::fromValue(static_cast<void*>(&map)));
-}
 
-template <> inline void MultiMapLinkProperty::updateValue(MObject *const mObject, const MObjectList &values)
+    values = set.toList();
+}
+template <> inline void OrderedLinkToManyProperty::updateValue(MObject *const mObject, MObjectList &values)
+{
+    updateValue(mObject, QVariant::fromValue(static_cast<void*>(&values)));
+}
+template <> inline void MultiMapLinkPropertyInterface::updateValue(MObject *const mObject, MObjectList &values)
 {
     MObjectMultiMap map;
     for (MObject *val : values)
         map.insert(val->getPropertyMapKey(this), val);
     updateValue(mObject, QVariant::fromValue(static_cast<void*>(&map)));
+
+    values.clear();
+    for (auto it = map.cbegin() , itEnd = map.cend(); it != itEnd ; ++it)
+        values.append(it.value());
 }
 
 
@@ -667,24 +655,7 @@ template <> inline void OrderedLinkToManyProperty::setValueFromXMIStringIdList(M
     if (!mObjectsToLink.isEmpty())
         updateValue(mObject, QVariant::fromValue(static_cast<void*>(&mObjectsToLink)));
 }
-template <> inline void MapLinkProperty::setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model)
-{
-    MObjectMap mObjectsToLink;
-    MObjectType *linkedEltType = mObject->getLinkedModelObjectType(this);
-    for (const QString &id_ : ids.split(" "))
-    {
-        QString id = id_.trimmed();
-        if (!id.isEmpty())
-        {
-            MObject *linkedModelObject = model->getModelObjectById(linkedEltType, id);
-            if (linkedModelObject)
-                mObjectsToLink[linkedModelObject->getPropertyMapKey(this)] = linkedModelObject;
-        }
-    }
-    if (!mObjectsToLink.isEmpty())
-        updateValue(mObject, QVariant::fromValue(static_cast<void*>(&mObjectsToLink)));
-}
-template <> inline void MultiMapLinkProperty::setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model)
+template <> inline void MultiMapLinkPropertyInterface::setValueFromXMIStringIdList(MObject *mObject, const QString &ids, Model *model)
 {
     MObjectMultiMap mObjectsToLink;
     MObjectType *linkedEltType = mObject->getLinkedModelObjectType(this);
@@ -702,12 +673,7 @@ template <> inline void MultiMapLinkProperty::setValueFromXMIStringIdList(MObjec
         updateValue(mObject, QVariant::fromValue(static_cast<void*>(&mObjectsToLink)));
 }
 
-template <> inline void MapLinkProperty::serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject)
-{
-    MObjectMap *map = getValues(mObject);
-    xmiWriter->addAttribute(_name, getMapValuesInInsertionOrder(*map));
-}
-template <> inline void MultiMapLinkProperty::serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject)
+template <> inline void MultiMapLinkPropertyInterface::serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject)
 {
     MObjectMap *map = getValues(mObject);
     xmiWriter->addAttribute(_name, getMapValuesInInsertionOrder(*map));
@@ -722,7 +688,7 @@ AttributeProperty<TypeAttribute>::AttributeProperty(const QString &name, const c
     Property(name, label), _defaultValue(defaultValue){}
 
 template<typename TypeAttribute>
-TypeAttribute AttributeProperty<TypeAttribute>::getValue(const MObject *mObject)
+TypeAttribute AttributeProperty<TypeAttribute>::getValue(const MObject * const mObject)
 {
     return mObject->getPropertyValue<TypeAttribute>(this);
 }
@@ -743,17 +709,19 @@ void AttributeProperty<TypeAttribute>::serializeAsXmiAttribute(XmiWriter *xmiWri
 
 #ifdef __USE_HMI__
 template<typename TypeAttribute>
-QWidget *AttributeProperty<TypeAttribute>::getEditor(MObject * const mObj, Model *model, QWidget *parent)
+QWidget *AttributeProperty<TypeAttribute>::getEditor(MObject * const mObj, QWidget *parent)
 {
-    Q_UNUSED(model)
     QLineEdit *lineEdit = new QLineEdit(parent);
-    lineEdit->setText(QString("%1").arg(getValue(mObj)));
+    if (mObj)
+    {
+        lineEdit->setText(QString("%1").arg(getValue(mObj)));
+        if (mObj->isReadOnly())
+                lineEdit->setReadOnly(true);
+    }
 
     QValidator *validator = getEditorValidator(lineEdit);
     lineEdit->setValidator(validator);
 
-    if (mObj && mObj->isReadOnly())
-        lineEdit->setReadOnly(true);
     return lineEdit;
 }
 #endif
@@ -763,7 +731,7 @@ AttributeListProperty<TypeAttribute>::AttributeListProperty(const QString &name,
     : Property(name, label) {}
 
 template<typename TypeAttribute>
-QList<TypeAttribute> AttributeListProperty<TypeAttribute>::getValue(MObject * const mObject)
+QList<TypeAttribute> AttributeListProperty<TypeAttribute>::getValue(const MObject * const mObject)
 {
     return mObject->getListPropertyValue<TypeAttribute>(this);
 }
@@ -861,7 +829,6 @@ template<> inline void AttributeProperty<QDateTime>::deserializeFromXmiAttribute
     setValue(mObject, QDateTime::fromString(xmiValue, "yyyy/MM/dd hh:mm:ss"));
 }
 
-
 template<> inline void FloatListProperty::deserializeFromXmiAttribute(MObject *mObject, const QString &xmiValue)
 {
     QList<float> values;
@@ -896,6 +863,18 @@ template<> inline void DoubleListProperty::deserializeFromXmiAttribute(MObject *
     }
 
     setValue(mObject, values);
+}
+
+template<> inline void StringListProperty::serializeAsXmiAttribute(XmiWriter *xmiWriter, MObject *mObject)
+{
+    QStringList values = getValue(mObject);
+    if (!values.isEmpty())
+        xmiWriter->addAttribute(_name, values.join(" "));
+}
+
+template<> inline void StringListProperty::deserializeFromXmiAttribute(MObject *mObject, const QString &xmiValue)
+{
+    setValue(mObject, xmiValue.split(" "));
 }
 
 #ifdef __USE_HMI__
@@ -980,6 +959,20 @@ template<> inline QVariant DateTimeProperty::getEditorUpdatedVariant(MObject * c
         return QVariant::fromValue(newDate);
     else
         return QVariant();
+}
+template<> inline QVariant PositionProperty::getEditorUpdatedVariant(MObject * const mObj, QWidget *editor)
+{
+    QLineEdit *lineEdit = static_cast<QLineEdit*>(editor);
+    QString val = lineEdit->text().trimmed();
+    val.chop(1); // remove the last char )
+    QStringList values = val.mid(1).split(", ");
+    if (values.size() == 2)
+    {
+        QPointF newPos(values.at(0).toDouble(), values.at(1).toDouble());
+        if (newPos != getValue(mObj))
+            return newPos;
+    }
+    return QVariant();
 }
 
 class DoubleValidatorWithInfinity : public QDoubleValidator
@@ -1115,11 +1108,15 @@ template<> inline QValidator *DateTimeProperty::getEditorValidator(QObject *pare
     Q_UNUSED(parent)
     return nullptr;
 }
-
-
-template <> inline QWidget *BoolProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
+template<> inline QValidator *PositionProperty::getEditorValidator(QObject *parent)
 {
-    Q_UNUSED(model)
+    Q_UNUSED(parent)
+    return nullptr;
+}
+
+
+template <> inline QWidget *BoolProperty::getEditor(MObject * const mObj, QWidget *parent)
+{
     QComboBox *cb = new QComboBox(parent);
     cb->addItem("true");
     cb->addItem("false");
@@ -1141,9 +1138,8 @@ template <> inline QWidget *BoolProperty::getEditor(MObject * const mObj, Model 
     return cb;
 }
 
-template <> inline QWidget *DoubleProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
+template <> inline QWidget *DoubleProperty::getEditor(MObject * const mObj, QWidget *parent)
 {
-    Q_UNUSED(model)
     QLineEdit *lineEdit = new QLineEdit(parent);
     if (mObj)
     {
@@ -1154,7 +1150,7 @@ template <> inline QWidget *DoubleProperty::getEditor(MObject * const mObj, Mode
         else if (val == DBL_INFINITE_POS)
             valStr = "+∞";
         else
-            valStr = QString::number(val);
+            valStr = QString::number(val, 'g', 13);
 
         lineEdit->setText(valStr);
 
@@ -1166,9 +1162,8 @@ template <> inline QWidget *DoubleProperty::getEditor(MObject * const mObj, Mode
     lineEdit->setValidator(validator);
     return lineEdit;
 }
-template <> inline QWidget *IntProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
+template <> inline QWidget *IntProperty::getEditor(MObject * const mObj, QWidget *parent)
 {
-    Q_UNUSED(model)
     QLineEdit *lineEdit = new QLineEdit(parent);
     if (mObj)
     {
@@ -1191,9 +1186,8 @@ template <> inline QWidget *IntProperty::getEditor(MObject * const mObj, Model *
     lineEdit->setValidator(validator);
     return lineEdit;
 }
-template <> inline QWidget *FloatProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
+template <> inline QWidget *FloatProperty::getEditor(MObject * const mObj, QWidget *parent)
 {
-    Q_UNUSED(model)
     QLineEdit *lineEdit = new QLineEdit(parent);
     if (mObj)
     {
@@ -1204,7 +1198,7 @@ template <> inline QWidget *FloatProperty::getEditor(MObject * const mObj, Model
         else if (val == FLT_INFINITE_POS)
             valStr = "+∞";
         else
-            valStr = QString::number(val);
+            valStr = QString::number(val, 'g', 13);
 
         if (mObj->isReadOnly())
             lineEdit->setReadOnly(true);
@@ -1216,11 +1210,20 @@ template <> inline QWidget *FloatProperty::getEditor(MObject * const mObj, Model
     lineEdit->setValidator(validator);
     return lineEdit;
 }
-template<> inline QWidget *DateTimeProperty::getEditor(MObject * const mObj, Model *model, QWidget *parent)
+template<> inline QWidget *DateTimeProperty::getEditor(MObject * const mObj, QWidget *parent)
 {
-    Q_UNUSED(model)
     QLineEdit *lineEdit = new QLineEdit(parent);
     lineEdit->setText(getValue(mObj).toString("yyyy/MM/dd hh:mm:ss"));
+    if (mObj && mObj->isReadOnly())
+        lineEdit->setReadOnly(true);
+    return lineEdit;
+}
+
+template<> inline QWidget *PositionProperty::getEditor(MObject * const mObj, QWidget *parent)
+{
+    QLineEdit *lineEdit = new QLineEdit(parent);
+    QPointF pos = getValue(mObj);
+    lineEdit->setText(QString("(%1, %2)").arg(pos.x()).arg(pos.y()));
     if (mObj && mObj->isReadOnly())
         lineEdit->setReadOnly(true);
     return lineEdit;

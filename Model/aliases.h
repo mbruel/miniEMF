@@ -18,9 +18,10 @@ using DoubleProperty    = AttributeProperty<double>;
 using StringProperty    = AttributeProperty<QString>;
 using DateTimeProperty  = AttributeProperty<QDateTime>;
 
-using IntListProperty = AttributeListProperty<int>;
-using FloatListProperty = AttributeListProperty<float>;
+using IntListProperty    = AttributeListProperty<int>;
+using FloatListProperty  = AttributeListProperty<float>;
 using DoubleListProperty = AttributeListProperty<double>;
+using StringListProperty = AttributeListProperty<QString>;
 
 class uIntProperty;
 class uDoubleProperty;
@@ -33,23 +34,24 @@ using Link01Property = LinkToOneProperty;
 using Link11Property = LinkToOneProperty;
 
 template <template <typename...> class Container, typename... Args> class GenericLinkToManyProperty;
-using LinkToManyProperty        = GenericLinkToManyProperty<QSet>;
-using Link0NProperty            = LinkToManyProperty;
-using Link1NProperty            = LinkToManyProperty;
-using SetProperty               = LinkToManyProperty;
-using OrderedLinkToManyProperty = GenericLinkToManyProperty<QList>;
-using OrderedLink0NProperty     = GenericLinkToManyProperty<QList>;
-using OrderedLink1NProperty     = GenericLinkToManyProperty<QList>;
-using ListProperty              = GenericLinkToManyProperty<QList>;
-using MapLinkProperty           = GenericLinkToManyProperty<QMap, QVariant>;
-using Map1NLinkProperty         = GenericLinkToManyProperty<QMap, QVariant>;
-using MultiMapLinkProperty      = GenericLinkToManyProperty<QMultiMap, QVariant>;
-using MultiMap1NLinkProperty    = GenericLinkToManyProperty<QMultiMap, QVariant>;
+class MapLinkProperty;
+
+using LinkToManyProperty            = GenericLinkToManyProperty<QSet>;
+using Link0NProperty                = LinkToManyProperty;
+using Link1NProperty                = LinkToManyProperty;
+using SetProperty                   = LinkToManyProperty;
+using OrderedLinkToManyProperty     = GenericLinkToManyProperty<QList>;
+using OrderedLink0NProperty         = GenericLinkToManyProperty<QList>;
+using OrderedLink1NProperty         = GenericLinkToManyProperty<QList>;
+using ListProperty                  = GenericLinkToManyProperty<QList>;
+using MultiMapLinkPropertyInterface = GenericLinkToManyProperty<QMultiMap, QVariant>;
+using Map1NLinkProperty             = MapLinkProperty;
+using MultiMapLinkProperty          = MapLinkProperty;
 
 using ElemId          = QString;
 using MObjectSet      = QSet<MObject*>;
 using MObjectList     = QList<MObject*>;
-using MObjectMap      = QMap<QVariant, MObject*>;
+using MObjectMap      = QMultiMap<QVariant, MObject*>;
 using MObjectMultiMap = QMultiMap<QVariant, MObject*>;
 
 

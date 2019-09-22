@@ -20,17 +20,11 @@ Meeting::~Meeting()
 #endif
 }
 
-QVariant Meeting::getPropertyMapKey(Property *mapProperty)
-{
-    Q_UNUSED(mapProperty)
-    return getDate();
-}
-
 QDateTime   Meeting::getDate()         { return PROPERTY_date->getValue(this); }
 MObjectMap *Meeting::getParticipants() { return PROPERTY_participants->getValues(this); }
 
 void Meeting::setDate(QDateTime value)            { PROPERTY_date->setValue(this, value); }
-void Meeting::setParticipants(const MObjectList &values){ PROPERTY_participants->updateValue(this, values); }
+void Meeting::setParticipants(MObjectList &values){ PROPERTY_participants->updateValue(this, values); }
 
 QString Meeting::getInfo()
 {
