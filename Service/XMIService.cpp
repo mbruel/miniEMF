@@ -150,14 +150,6 @@ void XMIService::initFromNode(MObject *mObject, const QDomNode &node)
     mObject->setId(strId);
     mObject->setName(strName);
 //    mObject->setDescription(strDescription);
-
-    QRegularExpression regExp("^(\\d+)_(\\d*)_(\\d+)$");
-    QRegularExpressionMatch match = regExp.match(strId);
-     if (match.hasMatch())
-     {
-         int typeId = match.captured(3).toInt();
-         mObject->getModelObjectType()->updateMaxId(typeId);
-     }
 }
 
 bool XMIService::initImportXMI(const QString &xmiPath)

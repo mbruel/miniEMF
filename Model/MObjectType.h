@@ -27,6 +27,7 @@
 #include <QSet>
 #include <QVariant>
 
+#include "aliases.h"
 class MObject;
 class LinkProperty;
 class LinkToOneProperty;
@@ -65,7 +66,7 @@ public:
 
     void initModelObjectWithDefaultValues(MObject *mObject, uint modelId);
 
-    void updateMaxId(int elemId);
+    void updateMaxId(const ElemId &elemId);
 
     inline uint nbModelObjects() const;
 
@@ -83,6 +84,8 @@ private:
     const ModelObjectCreator _elementCreator;
 
     uint _nbModelObjects;
+
+    static const QRegularExpression sElemIdTypeIdRegExp;
 };
 
 

@@ -254,7 +254,11 @@ QVariant MObject::toVariant() { return QVariant::fromValue(static_cast<void*>(th
 
 
 ElemId MObject::getId() const { return _id; }
-void MObject::setId(const ElemId &id) { _id = id; }
+void MObject::setId(const ElemId &id)
+{
+    _id = id;
+    getModelObjectType()->updateMaxId(id);
+}
 
 inline bool MObject::isInModel() const {return _state == STATE::ADDED_IN_MODEL;}
 

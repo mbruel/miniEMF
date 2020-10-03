@@ -97,6 +97,8 @@ public:
     MObjectType *getModelObjectTypeByName(const QString &name);
 
     void dumpModelObjectTypeMap(const QString &msg = "") const;
+    void dumpModel(const QString &msg = "") const;
+
 
     inline QString getDate() const;
     inline QString getExportDescription() const;

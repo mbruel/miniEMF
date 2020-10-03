@@ -325,6 +325,21 @@ void Model::dumpModelObjectTypeMap(const QString &msg) const
     }
 }
 
+void Model::dumpModel(const QString &msg) const
+{
+    qDebug() << "[Model::dumpModel] Dumping Model: "  << msg;
+    for (auto it = _mObjectTypeMap.cbegin(), itEnd = _mObjectTypeMap.cend(); it != itEnd; ++it)
+    {
+        MObjectType             *mObjectType = it.key();
+        QMap<QString, MObject*> *mObjectMap  = it.value();
+        if (mObjectMap->size())
+        {
+            qDebug() << mObjectType->getName() << " : " << mObjectMap->size()
+                     << " ( " << mObjectMap->keys().join(", ") << " )";
+        }
+    }
+}
+
 
 bool Model::operator ==(const Model &m)
 {

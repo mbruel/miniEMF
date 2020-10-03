@@ -296,7 +296,7 @@ qDebug() << "[MB_TRACE][MObject::clone] <<<<<<<<<< " << getName();
 MObject *MObject::shallowCopy()
 {
     // create clone using the appropriate Type constructor
-    MObject *newModelObject = getModelObjectType()->createModelObject(0);
+    MObject *newModelObject = getModelObjectType()->createModelObject(0, false); // no default init as it could create MObjects
     newModelObject->_id     = _id;
     newModelObject->_state  = STATE::CLONE;
 

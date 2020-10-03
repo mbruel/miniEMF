@@ -22,8 +22,11 @@
 #include <QDebug>
 #include "MObjectType.h"
 #include "MObject.h"
+#include "Model/Property.h"
 #include <QCoreApplication>
+#include <QRegularExpression>
 
+const QRegularExpression MObjectType::sElemIdTypeIdRegExp = QRegularExpression("^(\\d+)_(\\d*)_(\\d+)$");
 
 MObjectType::MObjectType(int id, const QString &name, const char *label, ModelObjectCreator eltCreator, bool isInstanciable):
     _id(id), _name(name), _label(label), _isInstanciable(isInstanciable),
@@ -86,7 +89,6 @@ void MObjectType::addSuperModelObjectType(MObjectType *superModelObjectType) {
     _superModelObjectTypes.insert(superModelObjectType);
 }
 
-#include "Model/Property.h"
 MObject *MObjectType::createModelObject(uint projectId, bool doDefaultInit, const QMap<Property *, QVariant> &properties)
 {
     if (_elementCreator == &MObject::createModelObject)
@@ -124,8 +126,13 @@ void MObjectType::initModelObjectWithDefaultValues(MObject *mObject, uint modelI
     mObject->setName(QString("%1 %2").arg(getLabel()).arg(_nbModelObjects));
 }
 
-void MObjectType::updateMaxId(int elemId)
+void MObjectType::updateMaxId(const ElemId &elemId)
 {
-    if (elemId > (int)_nbModelObjects)
-        _nbModelObjects = elemId;
+    QRegularExpressionMatch match = sElemIdTypeIdRegExp.match(elemId);
+    if (match.hasMatch())
+    {
+        uint typeId = match.captured(3).toUInt();
+        if (typeId > _nbModelObjects)
+            _nbModelObjects = typeId;
+    }
 }
